@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: autoparts-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: autoparts
+      POSTGRES_USER: ${DB_USERNAME:-autoparts}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-autoparts}
+    ports:
+      - "5433:5432"
+    volumes:
+      - autoparts-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-autoparts} -d autoparts"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  autoparts-pgdata:
