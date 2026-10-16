@@ -13,7 +13,7 @@ Use the Maven wrapper (Maven 3.10.0), not a system `mvn`.
 
 ## Gotchas
 - Base package is `com.autoparts_maven.autoparts_maven` (underscores, not dots) and lives under `src/main/java/com/autoparts_maven/autoparts_maven/`. Match it exactly for new code.
-- `application.properties` uses `DB_URL` (default `jdbc:postgresql://localhost:5433/autoparts`), `DB_USERNAME` and `DB_PASSWORD` (both default to `autoparts`, matching `docker-compose.yml`). No H2/test profile yet, so `@SpringBootTest` needs a reachable Postgres (the docker compose one works) or an override.
+- `application.properties` uses `DB_URL` (default `jdbc:postgresql://localhost:5433/autoparts`), `DB_USERNAME` and `DB_PASSWORD` (both default to `autoparts`, matching `docker-compose.yml`). Integration tests use the `test` profile (`src/test/resources/application-test.properties` + `@ActiveProfiles("test")`), which points to a dedicated `autoparts_test` schema in the same Postgres; Flyway creates it on first run. Run `docker compose up -d` before the tests.
 - Host port **5432 is occupied by a native PostgreSQL 18 Windows service** (`postgresql-x64-18`). The Docker Postgres is intentionally published on **5433**; do not move it back to 5432.
 - Schema is managed by Flyway through `spring-boot-starter-flyway`. Plain `flyway-core` will NOT run migrations in Spring Boot 4 (autoconfiguration is in the starter). Migrations live in `src/main/resources/db/migration` (naming `V<n>__desc.sql`). JPA runs with `ddl-auto=validate`, so entities must match the migrated schema.
 - PostgreSQL is the only runtime datasource. Adding tests that boot the context needs a reachable Postgres or an override.
