@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Spring Boot 4.1.1 REST API (Java 17, Maven). Early-stage. Product catalog in progress: Flyway migrations and the `products` table exist; no JPA entities/API yet.
+Spring Boot 4.1.1 REST API (Java 17, Maven). Early-stage. Product catalog: Flyway migration + `products` table, JPA entity/repository, `ProductService` (CRUD + DTOs + validation) and REST API `/api/products` (`ProductController` + `@RestControllerAdvice`). Reads are public; writes require HTTP Basic (`ADMIN_USER`/`ADMIN_PASSWORD`, dev defaults `admin`/`admin`).
 
 ## Commands
 Use the Maven wrapper (Maven 3.10.0), not a system `mvn`.
@@ -18,7 +18,8 @@ Use the Maven wrapper (Maven 3.10.0), not a system `mvn`.
 - Schema is managed by Flyway through `spring-boot-starter-flyway`. Plain `flyway-core` will NOT run migrations in Spring Boot 4 (autoconfiguration is in the starter). Migrations live in `src/main/resources/db/migration` (naming `V<n>__desc.sql`). JPA runs with `ddl-auto=validate`, so entities must match the migrated schema.
 - PostgreSQL is the only runtime datasource. Adding tests that boot the context needs a reachable Postgres or an override.
 - Lombok is wired through `maven-compiler-plugin` `annotationProcessorPaths` (both compile and test-compile). Keep that config if editing plugin settings.
-- This is Spring Boot 4: web uses `spring-boot-starter-webmvc` and test starters are per-module (`spring-boot-starter-*-test`), not the older `spring-boot-starter-web` / aggregate `spring-boot-starter-test`.
+- This is Spring Boot 4: web uses `spring-boot-starter-webmvc` and test starters are per-module (`spring-boot-starter-*-test`), not the older `spring-boot-starter-web` / aggregate `spring-boot-starter-test`. In Boot 4 `@AutoConfigureMockMvc` lives in `org.springframework.boot.webmvc.test.autoconfigure`.
+- `spring-boot-starter-security` is on the classpath with `config/SecurityConfig` (Spring Security 7 lambda DSL). `GET /api/products/**` is public; writes require HTTP Basic against an in-memory user (`ADMIN_USER`/`ADMIN_PASSWORD`). Controller tests authenticate writes with `spring-security-test`'s `httpBasic(...)`.
 
 ## Conventions
 - `HELP.md` is gitignored and is stock Spring Initializr boilerplate; ignore it.
