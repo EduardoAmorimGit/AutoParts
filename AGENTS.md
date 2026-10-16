@@ -19,7 +19,7 @@ Use the Maven wrapper (Maven 3.10.0), not a system `mvn`.
 - PostgreSQL is the only runtime datasource. Adding tests that boot the context needs a reachable Postgres or an override.
 - Lombok is wired through `maven-compiler-plugin` `annotationProcessorPaths` (both compile and test-compile). Keep that config if editing plugin settings.
 - This is Spring Boot 4: web uses `spring-boot-starter-webmvc` and test starters are per-module (`spring-boot-starter-*-test`), not the older `spring-boot-starter-web` / aggregate `spring-boot-starter-test`. In Boot 4 `@AutoConfigureMockMvc` lives in `org.springframework.boot.webmvc.test.autoconfigure`.
-- `spring-boot-starter-security` is on the classpath with `config/SecurityConfig` (Spring Security 7 lambda DSL). `GET /api/products/**` is public; writes require HTTP Basic against an in-memory user (`ADMIN_USER`/`ADMIN_PASSWORD`). Controller tests authenticate writes with `spring-security-test`'s `httpBasic(...)`.
+- `spring-boot-starter-security` is on the classpath with `config/SecurityConfig` (Spring Security 7 lambda DSL). `GET /api/products/**` and `/actuator/health` are public; writes (`POST/PUT/DELETE /api/products/**`) require HTTP Basic with the `ADMIN` role (`ADMIN_USER`/`ADMIN_PASSWORD`, dev defaults `admin`/`admin`). 401/403 return `ProblemDetail` JSON via `ProblemDetailAuthenticationEntryPoint`/`ProblemDetailAccessDeniedHandler`. Controller tests authenticate with `spring-security-test` (`httpBasic(...)` / `@WithMockUser`).
 
 ## Conventions
 - `HELP.md` is gitignored and is stock Spring Initializr boilerplate; ignore it.
