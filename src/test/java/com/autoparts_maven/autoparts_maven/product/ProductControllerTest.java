@@ -3,6 +3,7 @@ package com.autoparts_maven.autoparts_maven.product;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -150,6 +151,145 @@ class ProductControllerTest {
 
         mockMvc.perform(get("/api/products/{id}", product.id()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void returnsPageStructureForListing() throws Exception {
+        mockMvc.perform(get("/api/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void paginatesProducts() throws Exception {
+        seed("SKU-P-1", "P One");
+        seed("SKU-P-2", "P Two");
+        ProductResponse third = seed("SKU-P-3", "P Three");
+
+        mockMvc.perform(get("/api/products")
+                        .param("page", "0")
+                        .param("size", "2")
+                        .param("sort", "id,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.first").value(true))
+                .andExpect(jsonPath("$.last").value(false));
+
+        mockMvc.perform(get("/api/products")
+                        .param("page", "1")
+                        .param("size", "2")
+                        .param("sort", "id,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(third.id()))
+                .andExpect(jsonPath("$.last").value(true));
+    }
+
+    @Test
+    void sortsProductsByRequestedDirection() throws Exception {
+        seed("SKU-S-1", "S One");
+        seed("SKU-S-2", "S Two");
+        ProductResponse last = seed("SKU-S-3", "S Three");
+
+        mockMvc.perform(get("/api/products").param("size", "1").param("sort", "id,desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(last.id()));
+    }
+
+    @Test
+    void rejectsInvalidSortProperty() throws Exception {
+        mockMvc.perform(get("/api/products").param("sort", "bogus"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void returnsBadRequestForNonNumericId() throws Exception {
+        mockMvc.perform(get("/api/products/abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void returnsNotFoundForUnknownSubPath() throws Exception {
+        mockMvc.perform(get("/api/products/1/compat"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    void rejectsMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/products")
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void rejectsUnsupportedMediaType() throws Exception {
+        mockMvc.perform(post("/api/products")
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("not json"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(415));
+    }
+
+    @Test
+    void rejectsUnsupportedMethod() throws Exception {
+        mockMvc.perform(patch("/api/products/1")
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(405));
+    }
+
+    @Test
+    void rejectsTooLongBrand() throws Exception {
+        String brand = "b".repeat(101);
+
+        mockMvc.perform(post("/api/products")
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"SKU-BRAND\",\"name\":\"Brand Test\",\"brand\":\"" + brand
+                                + "\",\"price\":1.00,\"stockQuantity\":1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.brand").exists());
+    }
+
+    @Test
+    void normalizesSkuOnCreate() throws Exception {
+        mockMvc.perform(post("/api/products")
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("  sku-lower  ", "Normalized", "10.00", 1)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sku").value("SKU-LOWER"));
+    }
+
+    @Test
+    void rejectsDuplicateSkuIgnoringCaseAndSpaces() throws Exception {
+        seed("SKU-DUP-1", "Dup");
+
+        mockMvc.perform(post("/api/products")
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("  sku-dup-1 ", "Other", "10.00", 1)))
+                .andExpect(status().isConflict());
     }
 
     private ProductResponse seed(String sku, String name) {

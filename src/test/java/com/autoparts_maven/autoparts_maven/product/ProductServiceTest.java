@@ -74,6 +74,34 @@ class ProductServiceTest {
                 .isInstanceOf(ProductNotFoundException.class);
     }
 
+    @Test
+    void normalizesSkuWithTrimAndUppercase() {
+        ProductResponse created = productService.create(
+                new ProductRequest("  ab-12  ", "Normalized", null, null, new BigDecimal("1.00"), 1, true));
+
+        assertThat(created.sku()).isEqualTo("AB-12");
+    }
+
+    @Test
+    void rejectsDuplicateSkuIgnoringCaseAndSpaces() {
+        productService.create(new ProductRequest("ab-99", "First", null, null, new BigDecimal("1.00"), 1, true));
+
+        assertThatThrownBy(() -> productService.create(
+                new ProductRequest("  AB-99 ", "Second", null, null, new BigDecimal("1.00"), 1, true)))
+                .isInstanceOf(DuplicateSkuException.class);
+    }
+
+    @Test
+    void normalizesSkuOnUpdate() {
+        ProductResponse created = productService.create(
+                new ProductRequest("upd-1", "Before", null, null, new BigDecimal("1.00"), 1, true));
+
+        ProductResponse updated = productService.update(created.id(),
+                new ProductRequest(" upd-2 ", "After", null, null, new BigDecimal("1.00"), 1, true));
+
+        assertThat(updated.sku()).isEqualTo("UPD-2");
+    }
+
     private ProductRequest request(String sku, String name, Boolean active) {
         return new ProductRequest(sku, name, "desc", "brand", new BigDecimal("10.00"), 1, active);
     }
