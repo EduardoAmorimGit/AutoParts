@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Spring Boot 4.1.1 REST API (Java 17, Maven). Early-stage. Product catalog: Flyway migration + `products` table, JPA entity/repository, `ProductService` (CRUD + DTOs + validation) and REST API `/api/products` (`ProductController` + `@RestControllerAdvice`). Reads are public; writes require HTTP Basic (`ADMIN_USER`/`ADMIN_PASSWORD`, dev defaults `admin`/`admin`).
+Spring Boot 4.1.1 REST API (Java 17, Maven). Early-stage. Product catalog: Flyway migration + `products` table, JPA entity/repository, `ProductService` (CRUD + DTOs + validation) and REST API `/api/products` (`ProductController` + `@RestControllerAdvice`). Reads are public; writes require HTTP Basic (`ADMIN_USER`/`ADMIN_PASSWORD`, dev defaults `admin`/`admin`). `GET /api/products` is paginated/sorted (Spring Data `Pageable`, default size 20, max 100, default sort `id,asc`) and returns the `common/PageResponse` envelope (`content`, `page`, `size`, `totalElements`, `totalPages`, `first`, `last`). SKUs are normalized (trim + uppercase, `Locale.ROOT`) before persistence and duplicate checks.
 
 ## Commands
 Use the Maven wrapper (Maven 3.10.0), not a system `mvn`.
@@ -19,7 +19,8 @@ Use the Maven wrapper (Maven 3.10.0), not a system `mvn`.
 - PostgreSQL is the only runtime datasource. Adding tests that boot the context needs a reachable Postgres or an override.
 - Lombok is wired through `maven-compiler-plugin` `annotationProcessorPaths` (both compile and test-compile). Keep that config if editing plugin settings.
 - This is Spring Boot 4: web uses `spring-boot-starter-webmvc` and test starters are per-module (`spring-boot-starter-*-test`), not the older `spring-boot-starter-web` / aggregate `spring-boot-starter-test`. In Boot 4 `@AutoConfigureMockMvc` lives in `org.springframework.boot.webmvc.test.autoconfigure`.
-- `spring-boot-starter-security` is on the classpath with `config/SecurityConfig` (Spring Security 7 lambda DSL). `GET /api/products/**` and `/actuator/health` are public; writes (`POST/PUT/DELETE /api/products/**`) require HTTP Basic with the `ADMIN` role (`ADMIN_USER`/`ADMIN_PASSWORD`, dev defaults `admin`/`admin`). 401/403 return `ProblemDetail` JSON via `ProblemDetailAuthenticationEntryPoint`/`ProblemDetailAccessDeniedHandler`. Controller tests authenticate with `spring-security-test` (`httpBasic(...)` / `@WithMockUser`).
+- `spring-boot-starter-security` is on the classpath with `config/SecurityConfig` (Spring Security 7 lambda DSL). `GET /api/products/**` and `/actuator/health` are public; writes (`POST/PUT/DELETE /api/products/**`) require HTTP Basic with the `ADMIN` role (`ADMIN_USER`/`ADMIN_PASSWORD`, dev defaults `admin`/`admin`). 401/403 return `ProblemDetail` JSON via `ProblemDetailAuthenticationEntryPoint`/`ProblemDetailAccessDeniedHandler`. `DispatcherType.ERROR` is permitted so error responses are not masked as 401. Controller tests authenticate with `spring-security-test` (`httpBasic(...)` / `@WithMockUser`).
+- `product/ProductExceptionHandler` is a global `@RestControllerAdvice` (name is legacy) that maps domain errors (404/409/400-validation) **and** framework errors (bad path variable, malformed body, invalid sort, unsupported method/media type, unknown path) to `ProblemDetail` (`application/problem+json`). `GET /api/products` returns the `common/PageResponse` envelope. SKUs are normalized (trim + uppercase, `Locale.ROOT`) in `ProductService` before persistence and duplicate checks.
 
 ## Conventions
 - `HELP.md` is gitignored and is stock Spring Initializr boilerplate; ignore it.
