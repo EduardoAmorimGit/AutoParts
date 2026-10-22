@@ -1,8 +1,10 @@
 package com.autoparts_maven.autoparts_maven.product;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
+import com.autoparts_maven.autoparts_maven.compatibility.CompatibilityService;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductRequest;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductResponse;
+import com.autoparts_maven.autoparts_maven.vehicle.dto.VehicleResponse;
 import jakarta.validation.Valid;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class ProductController {
 
     private final ProductService productService;
+    private final CompatibilityService compatibilityService;
 
     @GetMapping
     public PageResponse<ProductResponse> findAll(
@@ -36,6 +39,13 @@ public class ProductController {
     @GetMapping("/{id}")
     public ProductResponse findById(@PathVariable Long id) {
         return productService.findById(id);
+    }
+
+    @GetMapping("/{id}/vehicles")
+    public PageResponse<VehicleResponse> findVehiclesForProduct(
+            @PathVariable Long id,
+            @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.ASC) Pageable pageable) {
+        return compatibilityService.findVehiclesForProduct(id, pageable);
     }
 
     @PostMapping
