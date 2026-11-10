@@ -50,8 +50,4 @@ public class SimplesApiProperties {
     public void setReadTimeoutSeconds(int readTimeoutSeconds) {
         this.readTimeoutSeconds = readTimeoutSeconds;
     }
-
-    public boolean isConfigured() {
-        return apiKey != null && !apiKey.isBlank();
-    }
 }

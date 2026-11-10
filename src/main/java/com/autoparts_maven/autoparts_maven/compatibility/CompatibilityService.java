@@ -1,11 +1,9 @@
 package com.autoparts_maven.autoparts_maven.compatibility;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
-import com.autoparts_maven.autoparts_maven.product.Product;
 import com.autoparts_maven.autoparts_maven.product.ProductNotFoundException;
 import com.autoparts_maven.autoparts_maven.product.ProductRepository;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductResponse;
-import com.autoparts_maven.autoparts_maven.vehicle.Vehicle;
 import com.autoparts_maven.autoparts_maven.vehicle.VehicleNotFoundException;
 import com.autoparts_maven.autoparts_maven.vehicle.VehicleRepository;
 import com.autoparts_maven.autoparts_maven.vehicle.dto.VehicleResponse;
@@ -14,6 +12,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Explicit product/vehicle compatibility. A product is compatible with a vehicle only when an
+ * administrator registered the link; nothing is inferred from brand, model or similarity.
+ */
 @Service
 @RequiredArgsConstructor
 public class CompatibilityService {
@@ -22,40 +24,49 @@ public class CompatibilityService {
     private final VehicleRepository vehicleRepository;
     private final ProductVehicleRepository productVehicleRepository;
 
+    /** Idempotent: linking an already linked pair is a no-op. */
     @Transactional
     public void link(Long productId, Long vehicleId) {
-        if (productVehicleRepository.findByProductAndVehicle(
-                getProductOrThrow(productId), getVehicleOrThrow(vehicleId)).isPresent()) {
-            return;
-        }
-        productVehicleRepository.save(new ProductVehicle(getProductOrThrow(productId), getVehicleOrThrow(vehicleId)));
+        ensureProductExists(productId);
+        ensureVehicleExists(vehicleId);
+        productVehicleRepository.insertIfAbsent(productId, vehicleId);
     }
 
+    /** Idempotent: unlinking a pair that is not linked is a no-op. */
     @Transactional
     public void unlink(Long productId, Long vehicleId) {
-        productVehicleRepository.deleteByProductAndVehicle(
-                getProductOrThrow(productId), getVehicleOrThrow(vehicleId));
+        ensureProductExists(productId);
+        ensureVehicleExists(vehicleId);
+        productVehicleRepository.deleteLink(productId, vehicleId);
     }
 
+    /** Administrative view: every vehicle linked to the product. */
     @Transactional(readOnly = true)
     public PageResponse<VehicleResponse> findVehiclesForProduct(Long productId, Pageable pageable) {
-        Product product = getProductOrThrow(productId);
-        return PageResponse.from(
-                productVehicleRepository.findByProduct(product, pageable).map(l -> VehicleResponse.from(l.getVehicle())));
+        ensureProductExists(productId);
+        return PageResponse.from(vehicleRepository
+                .findAll(CompatibilitySpecifications.vehiclesLinkedTo(productId), pageable)
+                .map(VehicleResponse::from));
     }
 
+    /** Customer view: active products with a registered link to the vehicle. */
     @Transactional(readOnly = true)
     public PageResponse<ProductResponse> findProductsForVehicle(Long vehicleId, Pageable pageable) {
-        Vehicle vehicle = getVehicleOrThrow(vehicleId);
-        return PageResponse.from(
-                productVehicleRepository.findByVehicle(vehicle, pageable).map(l -> ProductResponse.from(l.getProduct())));
+        ensureVehicleExists(vehicleId);
+        return PageResponse.from(productRepository
+                .findAll(CompatibilitySpecifications.activeProductsLinkedTo(vehicleId), pageable)
+                .map(ProductResponse::from));
     }
 
-    private Product getProductOrThrow(Long id) {
-        return productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException(id));
+    private void ensureProductExists(Long productId) {
+        if (!productRepository.existsById(productId)) {
+            throw new ProductNotFoundException(productId);
+        }
     }
 
-    private Vehicle getVehicleOrThrow(Long id) {
-        return vehicleRepository.findById(id).orElseThrow(() -> new VehicleNotFoundException(id));
+    private void ensureVehicleExists(Long vehicleId) {
+        if (!vehicleRepository.existsById(vehicleId)) {
+            throw new VehicleNotFoundException(vehicleId);
+        }
     }
 }

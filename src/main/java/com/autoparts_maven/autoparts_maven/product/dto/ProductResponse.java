@@ -13,6 +13,7 @@ public record ProductResponse(
         BigDecimal price,
         Integer stockQuantity,
         Boolean active,
+        Long version,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -27,6 +28,7 @@ public record ProductResponse(
                 product.getPrice(),
                 product.getStockQuantity(),
                 product.getActive(),
+                product.getVersion(),
                 product.getCreatedAt(),
                 product.getUpdatedAt()
         );

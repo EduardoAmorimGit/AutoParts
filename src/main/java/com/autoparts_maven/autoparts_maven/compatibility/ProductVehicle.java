@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
 @Table(name = "product_vehicle")
@@ -35,12 +36,12 @@ public class ProductVehicle {
     @JoinColumn(name = "vehicle_id", nullable = false)
     private Vehicle vehicle;
 
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     public ProductVehicle(Product product, Vehicle vehicle) {
         this.product = product;
         this.vehicle = vehicle;
-        this.createdAt = LocalDateTime.now();
     }
 }

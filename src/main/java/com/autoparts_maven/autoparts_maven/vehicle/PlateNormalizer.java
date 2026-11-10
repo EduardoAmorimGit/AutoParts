@@ -7,18 +7,17 @@ public final class PlateNormalizer {
 
     private static final Pattern MERCOSUL = Pattern.compile("^[A-Z]{3}[0-9][A-Z][0-9]{2}$");
     private static final Pattern LEGACY = Pattern.compile("^[A-Z]{3}[0-9]{4}$");
+    private static final Pattern SEPARATORS = Pattern.compile("[^A-Za-z0-9]");
 
     private PlateNormalizer() {
     }
 
+    /** Uppercases and drops every non-alphanumeric character (hyphen, dot, spaces, tabs). */
     public static String normalize(String plate) {
         if (plate == null) {
             return null;
         }
-        return plate.replace("-", "")
-                .replace(" ", "")
-                .trim()
-                .toUpperCase(Locale.ROOT);
+        return SEPARATORS.matcher(plate).replaceAll("").toUpperCase(Locale.ROOT);
     }
 
     public static boolean isValid(String normalizedPlate) {

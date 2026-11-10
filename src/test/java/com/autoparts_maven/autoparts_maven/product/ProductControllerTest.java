@@ -254,8 +254,41 @@ class ProductControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().exists(HttpHeaders.ALLOW))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(405));
+    }
+
+    @Test
+    void findByIdReturnsVersionAsETag() throws Exception {
+        ProductResponse product = seed("SKU-ETAG-1", "Tagged");
+
+        mockMvc.perform(get("/api/products/{id}", product.id()))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ETAG, "\"" + product.version() + "\""))
+                .andExpect(jsonPath("$.version").value(product.version()));
+    }
+
+    @Test
+    void updateWithCurrentIfMatchSucceedsAndStaleIfMatchFails() throws Exception {
+        ProductResponse product = seed("SKU-ETAG-2", "Tagged");
+        String currentETag = "\"" + product.version() + "\"";
+
+        mockMvc.perform(put("/api/products/{id}", product.id())
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .header(HttpHeaders.IF_MATCH, currentETag)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("SKU-ETAG-2", "First edit", "10.00", 1)))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ETAG, "\"" + (product.version() + 1) + "\""));
+
+        mockMvc.perform(put("/api/products/{id}", product.id())
+                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .header(HttpHeaders.IF_MATCH, currentETag)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("SKU-ETAG-2", "Stale edit", "10.00", 1)))
+                .andExpect(status().isPreconditionFailed())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     @Test

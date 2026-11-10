@@ -2,8 +2,9 @@ package com.autoparts_maven.autoparts_maven.vehicle;
 
 import com.autoparts_maven.autoparts_maven.integration.vehicle.VehicleData;
 import com.autoparts_maven.autoparts_maven.vehicle.dto.VehicleResponse;
-import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,31 +14,33 @@ public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
     private final PlateLookup plateLookup;
+    private final LookupRateLimiter lookupRateLimiter;
 
-    @Transactional
-    public VehicleResponse lookupByPlate(String rawPlate) {
+    /**
+     * Resolves a plate to a vehicle, reusing the stored record when present.
+     *
+     * <p>Deliberately not {@code @Transactional}: the provider call can take seconds and must not
+     * hold a pooled database connection. Each repository call runs in its own short transaction.
+     * Only provider calls count against the caller's rate limit; stored vehicles are served freely.
+     */
+    public VehicleResponse lookupByPlate(String rawPlate, String clientId) {
         String plate = normalizeOrThrow(rawPlate);
 
-        return vehicleRepository.findByPlate(plate)
-                .map(VehicleResponse::from)
-                .orElseGet(() -> VehicleResponse.from(persist(plateLookup.fetch(plate))));
+        Optional<Vehicle> existing = vehicleRepository.findByPlate(plate);
+        if (existing.isPresent()) {
+            return VehicleResponse.from(existing.get());
+        }
+
+        lookupRateLimiter.acquire(clientId);
+        VehicleData data = plateLookup.fetch(plate);
+        return VehicleResponse.from(persist(plate, data));
     }
 
     @Transactional(readOnly = true)
-    public Vehicle getByIdOrThrow(Long id) {
+    public VehicleResponse findById(Long id) {
         return vehicleRepository.findById(id)
+                .map(VehicleResponse::from)
                 .orElseThrow(() -> new VehicleNotFoundException(id));
-    }
-
-    @Transactional(readOnly = true)
-    public Vehicle getByPlateOrThrow(String rawPlate) {
-        String plate = normalizeOrThrow(rawPlate);
-        return vehicleRepository.findByPlate(plate)
-                .orElseThrow(() -> new VehicleNotFoundException(plate));
-    }
-
-    public boolean isLookupEnabled() {
-        return plateLookup.isEnabled();
     }
 
     private String normalizeOrThrow(String rawPlate) {
@@ -48,9 +51,12 @@ public class VehicleService {
         return plate;
     }
 
-    private Vehicle persist(VehicleData data) {
+    // The stored plate is always the normalized plate that was requested, never the one echoed by
+    // the provider, so the unique key matches future lookups. A concurrent lookup of the same plate
+    // may win the insert; in that case the row it stored is returned.
+    private Vehicle persist(String plate, VehicleData data) {
         Vehicle vehicle = new Vehicle();
-        vehicle.setPlate(data.plate());
+        vehicle.setPlate(plate);
         vehicle.setBrand(data.brand());
         vehicle.setModel(data.model());
         vehicle.setVersion(data.version());
@@ -62,10 +68,11 @@ public class VehicleService {
         vehicle.setPassengerCapacity(data.passengerCapacity());
         vehicle.setEngineCc(data.engineCc());
         vehicle.setOrigin(data.origin());
-        vehicle.setSource("SIMPLES_API");
-        LocalDateTime now = LocalDateTime.now();
-        vehicle.setCreatedAt(now);
-        vehicle.setUpdatedAt(now);
-        return vehicleRepository.save(vehicle);
+        vehicle.setSource(VehicleSource.SIMPLES_API);
+        try {
+            return vehicleRepository.saveAndFlush(vehicle);
+        } catch (DataIntegrityViolationException exception) {
+            return vehicleRepository.findByPlate(plate).orElseThrow(() -> exception);
+        }
     }
 }

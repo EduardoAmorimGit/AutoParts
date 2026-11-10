@@ -1,19 +1,24 @@
 package com.autoparts_maven.autoparts_maven.compatibility;
 
-import com.autoparts_maven.autoparts_maven.product.Product;
-import com.autoparts_maven.autoparts_maven.vehicle.Vehicle;
-import java.util.Optional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 
 public interface ProductVehicleRepository extends JpaRepository<ProductVehicle, Long> {
 
-    Optional<ProductVehicle> findByProductAndVehicle(Product product, Vehicle vehicle);
+    /**
+     * Idempotent, race-free link: concurrent requests for the same pair cannot violate
+     * {@code uq_product_vehicle}. Returns 1 when a link was created, 0 when it already existed.
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO product_vehicle (product_id, vehicle_id, created_at)
+            VALUES (:productId, :vehicleId, now())
+            ON CONFLICT (product_id, vehicle_id) DO NOTHING
+            """, nativeQuery = true)
+    int insertIfAbsent(Long productId, Long vehicleId);
 
-    Page<ProductVehicle> findByProduct(Product product, Pageable pageable);
-
-    Page<ProductVehicle> findByVehicle(Vehicle vehicle, Pageable pageable);
-
-    void deleteByProductAndVehicle(Product product, Vehicle vehicle);
+    @Modifying
+    @Query("delete from ProductVehicle pv where pv.product.id = :productId and pv.vehicle.id = :vehicleId")
+    int deleteLink(Long productId, Long vehicleId);
 }

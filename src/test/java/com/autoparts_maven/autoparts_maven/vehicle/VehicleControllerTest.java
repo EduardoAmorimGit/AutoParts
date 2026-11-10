@@ -1,5 +1,8 @@
 package com.autoparts_maven.autoparts_maven.vehicle;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -64,17 +67,29 @@ class VehicleControllerTest {
     }
 
     @Test
-    void findByIdIsPublic() throws Exception {
+    void lookupNotFoundDoesNotEchoThePlate() throws Exception {
+        mockMvc.perform(post("/api/vehicles/lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"" + VehicleLookupTestConfig.UNKNOWN_PLATE + "\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(not(containsString(VehicleLookupTestConfig.UNKNOWN_PLATE))));
+    }
+
+    @Test
+    void findByIdRequiresAdminBecauseItExposesThePlate() throws Exception {
         Long id = lookupAndGetId();
 
         mockMvc.perform(get("/api/vehicles/{id}", id))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/vehicles/{id}", id).with(httpBasic("admin", "admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id));
     }
 
     @Test
     void findByIdReturnsNotFoundForUnknownId() throws Exception {
-        mockMvc.perform(get("/api/vehicles/{id}", 999_999))
+        mockMvc.perform(get("/api/vehicles/{id}", 999_999).with(httpBasic("admin", "admin")))
                 .andExpect(status().isNotFound());
     }
 
