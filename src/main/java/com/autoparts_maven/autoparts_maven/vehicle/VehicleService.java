@@ -1,20 +1,27 @@
 package com.autoparts_maven.autoparts_maven.vehicle;
 
+import com.autoparts_maven.autoparts_maven.common.ratelimit.FixedWindowRateLimiter;
 import com.autoparts_maven.autoparts_maven.integration.vehicle.VehicleData;
 import com.autoparts_maven.autoparts_maven.vehicle.dto.VehicleResponse;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
     private final PlateLookup plateLookup;
-    private final LookupRateLimiter lookupRateLimiter;
+    private final FixedWindowRateLimiter lookupRateLimiter;
+
+    public VehicleService(VehicleRepository vehicleRepository, PlateLookup plateLookup,
+            @Qualifier("lookupRateLimiter") FixedWindowRateLimiter lookupRateLimiter) {
+        this.vehicleRepository = vehicleRepository;
+        this.plateLookup = plateLookup;
+        this.lookupRateLimiter = lookupRateLimiter;
+    }
 
     /**
      * Resolves a plate to a vehicle, reusing the stored record when present.

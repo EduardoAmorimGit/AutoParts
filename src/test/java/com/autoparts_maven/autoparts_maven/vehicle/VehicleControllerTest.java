@@ -2,7 +2,7 @@ package com.autoparts_maven.autoparts_maven.vehicle;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static com.autoparts_maven.autoparts_maven.support.TestAuth.admin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -82,14 +82,14 @@ class VehicleControllerTest {
         mockMvc.perform(get("/api/vehicles/{id}", id))
                 .andExpect(status().isUnauthorized());
 
-        mockMvc.perform(get("/api/vehicles/{id}", id).with(httpBasic("admin", "admin")))
+        mockMvc.perform(get("/api/vehicles/{id}", id).with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id));
     }
 
     @Test
     void findByIdReturnsNotFoundForUnknownId() throws Exception {
-        mockMvc.perform(get("/api/vehicles/{id}", 999_999).with(httpBasic("admin", "admin")))
+        mockMvc.perform(get("/api/vehicles/{id}", 999_999).with(admin()))
                 .andExpect(status().isNotFound());
     }
 

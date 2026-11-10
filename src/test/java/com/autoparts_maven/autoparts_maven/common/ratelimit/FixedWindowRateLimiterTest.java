@@ -1,4 +1,4 @@
-package com.autoparts_maven.autoparts_maven.vehicle;
+package com.autoparts_maven.autoparts_maven.common.ratelimit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -10,10 +10,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
-class LookupRateLimiterTest {
+class FixedWindowRateLimiterTest {
 
     private final MutableClock clock = new MutableClock();
-    private final LookupRateLimiter limiter = new LookupRateLimiter(2, Duration.ofMinutes(1), clock);
+    private final FixedWindowRateLimiter limiter = new FixedWindowRateLimiter(2, Duration.ofMinutes(1), clock);
 
     @Test
     void allowsUpToTheLimitWithinAWindow() {
@@ -29,8 +29,8 @@ class LookupRateLimiterTest {
         limiter.acquire("10.0.0.1");
 
         assertThatThrownBy(() -> limiter.acquire("10.0.0.1"))
-                .isInstanceOf(LookupRateLimitExceededException.class)
-                .satisfies(e -> assertThat(((LookupRateLimitExceededException) e).getRetryAfterSeconds())
+                .isInstanceOf(RateLimitExceededException.class)
+                .satisfies(e -> assertThat(((RateLimitExceededException) e).getRetryAfterSeconds())
                         .isBetween(1L, 60L));
     }
 
@@ -54,9 +54,9 @@ class LookupRateLimiterTest {
 
     @Test
     void rejectsInvalidConfiguration() {
-        assertThatThrownBy(() -> new LookupRateLimiter(0, Duration.ofMinutes(1), clock))
+        assertThatThrownBy(() -> new FixedWindowRateLimiter(0, Duration.ofMinutes(1), clock))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new LookupRateLimiter(1, Duration.ZERO, clock))
+        assertThatThrownBy(() -> new FixedWindowRateLimiter(1, Duration.ZERO, clock))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

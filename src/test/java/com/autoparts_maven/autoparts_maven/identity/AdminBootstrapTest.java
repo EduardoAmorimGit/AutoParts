@@ -1,4 +1,4 @@
-package com.autoparts_maven.autoparts_maven.config;
+package com.autoparts_maven.autoparts_maven.identity;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -6,16 +6,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
-class SecurityConfigTest {
+class AdminBootstrapTest {
 
     @Test
     void productionRejectsDefaultOrBlankAdminPassword() {
         MockEnvironment prod = new MockEnvironment();
         prod.setActiveProfiles("prod");
 
-        assertThatThrownBy(() -> SecurityConfig.requireRealPasswordInProduction("admin", prod))
+        assertThatThrownBy(() -> AdminBootstrap.requireRealPasswordInProduction("admin", prod))
                 .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> SecurityConfig.requireRealPasswordInProduction(" ", prod))
+        assertThatThrownBy(() -> AdminBootstrap.requireRealPasswordInProduction(" ", prod))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -24,13 +24,13 @@ class SecurityConfigTest {
         MockEnvironment prod = new MockEnvironment();
         prod.setActiveProfiles("prod");
 
-        assertThatCode(() -> SecurityConfig.requireRealPasswordInProduction("s3cure-Pass!", prod))
+        assertThatCode(() -> AdminBootstrap.requireRealPasswordInProduction("s3cure-Pass!", prod))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void developmentKeepsTheConvenienceDefault() {
-        assertThatCode(() -> SecurityConfig.requireRealPasswordInProduction("admin", new MockEnvironment()))
+        assertThatCode(() -> AdminBootstrap.requireRealPasswordInProduction("admin", new MockEnvironment()))
                 .doesNotThrowAnyException();
     }
 }

@@ -1,6 +1,6 @@
 package com.autoparts_maven.autoparts_maven.compatibility;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static com.autoparts_maven.autoparts_maven.support.TestAuth.admin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -31,8 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class CompatibilityControllerTest {
 
-    private static final String ADMIN_USER = "admin";
-    private static final String ADMIN_PASSWORD = "admin";
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,7 +47,7 @@ class CompatibilityControllerTest {
         Vehicle vehicle = seedVehicle("CCA1B23");
 
         mockMvc.perform(put("/api/products/{p}/vehicles/{v}", product.id(), vehicle.getId())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                        .with(admin()))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/vehicles/{v}/products", vehicle.getId()))
@@ -65,7 +63,7 @@ class CompatibilityControllerTest {
 
         for (int i = 0; i < 2; i++) {
             mockMvc.perform(put("/api/products/{p}/vehicles/{v}", product.id(), vehicle.getId())
-                            .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                            .with(admin()))
                     .andExpect(status().isNoContent());
         }
 
@@ -79,10 +77,10 @@ class CompatibilityControllerTest {
         Vehicle vehicle = seedVehicle("CCC1D23");
 
         mockMvc.perform(put("/api/products/{p}/vehicles/{v}", product.id(), vehicle.getId())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                        .with(admin()))
                 .andExpect(status().isNoContent());
         mockMvc.perform(delete("/api/products/{p}/vehicles/{v}", product.id(), vehicle.getId())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                        .with(admin()))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/vehicles/{v}/products", vehicle.getId()))
@@ -108,7 +106,7 @@ class CompatibilityControllerTest {
         ProductResponse product = seedProduct("SKU-CC-4");
 
         mockMvc.perform(put("/api/products/{p}/vehicles/{v}", product.id(), 999_999)
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                        .with(admin()))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
@@ -121,7 +119,7 @@ class CompatibilityControllerTest {
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/products/{p}/vehicles", product.id())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                        .with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0));
     }
@@ -133,7 +131,7 @@ class CompatibilityControllerTest {
         Vehicle vehicle = seedVehicle("CCD1E23");
         for (ProductResponse product : new ProductResponse[] {zeta, alpha}) {
             mockMvc.perform(put("/api/products/{p}/vehicles/{v}", product.id(), vehicle.getId())
-                            .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                            .with(admin()))
                     .andExpect(status().isNoContent());
         }
 

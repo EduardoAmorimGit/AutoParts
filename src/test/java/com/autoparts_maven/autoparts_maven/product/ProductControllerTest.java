@@ -1,6 +1,6 @@
 package com.autoparts_maven.autoparts_maven.product;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static com.autoparts_maven.autoparts_maven.support.TestAuth.admin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -31,8 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class ProductControllerTest {
 
-    private static final String ADMIN_USER = "admin";
-    private static final String ADMIN_PASSWORD = "admin";
 
     @Autowired
     private MockMvc mockMvc;
@@ -70,7 +68,7 @@ class ProductControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-200", "Air Filter", "25.00", 5)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=\"AutoParts\""))
+                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, "Bearer"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(401));
     }
@@ -89,7 +87,7 @@ class ProductControllerTest {
     @Test
     void createsProductWhenAuthenticated() throws Exception {
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-201", "Spark Plug", "12.50", 8)))
                 .andExpect(status().isCreated())
@@ -104,7 +102,7 @@ class ProductControllerTest {
         seed("SKU-300", "Brake Pad");
 
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-300", "Other", "10.00", 1)))
                 .andExpect(status().isConflict());
@@ -113,7 +111,7 @@ class ProductControllerTest {
     @Test
     void rejectsInvalidPayload() throws Exception {
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("", "", "-1.00", -1)))
                 .andExpect(status().isBadRequest())
@@ -125,7 +123,7 @@ class ProductControllerTest {
         ProductResponse product = seed("SKU-400", "Fuel Pump");
 
         mockMvc.perform(put("/api/products/{id}", product.id())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-400", "Fuel Pump Premium", "199.90", 3)))
                 .andExpect(status().isOk())
@@ -135,7 +133,7 @@ class ProductControllerTest {
     @Test
     void returnsNotFoundWhenUpdatingUnknownId() throws Exception {
         mockMvc.perform(put("/api/products/{id}", 999_999)
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-500", "Radiator", "300.00", 2)))
                 .andExpect(status().isNotFound());
@@ -146,7 +144,7 @@ class ProductControllerTest {
         ProductResponse product = seed("SKU-600", "Shock Absorber");
 
         mockMvc.perform(delete("/api/products/{id}", product.id())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD)))
+                        .with(admin()))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/products/{id}", product.id()))
@@ -228,7 +226,7 @@ class ProductControllerTest {
     @Test
     void rejectsMalformedJson() throws Exception {
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"sku\":"))
                 .andExpect(status().isBadRequest())
@@ -239,7 +237,7 @@ class ProductControllerTest {
     @Test
     void rejectsUnsupportedMediaType() throws Exception {
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.TEXT_PLAIN)
                         .content("not json"))
                 .andExpect(status().isUnsupportedMediaType())
@@ -250,7 +248,7 @@ class ProductControllerTest {
     @Test
     void rejectsUnsupportedMethod() throws Exception {
         mockMvc.perform(patch("/api/products/1")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isMethodNotAllowed())
@@ -275,7 +273,7 @@ class ProductControllerTest {
         String currentETag = "\"" + product.version() + "\"";
 
         mockMvc.perform(put("/api/products/{id}", product.id())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .header(HttpHeaders.IF_MATCH, currentETag)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-ETAG-2", "First edit", "10.00", 1)))
@@ -283,7 +281,7 @@ class ProductControllerTest {
                 .andExpect(header().string(HttpHeaders.ETAG, "\"" + (product.version() + 1) + "\""));
 
         mockMvc.perform(put("/api/products/{id}", product.id())
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .header(HttpHeaders.IF_MATCH, currentETag)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("SKU-ETAG-2", "Stale edit", "10.00", 1)))
@@ -296,7 +294,7 @@ class ProductControllerTest {
         String brand = "b".repeat(101);
 
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"sku\":\"SKU-BRAND\",\"name\":\"Brand Test\",\"brand\":\"" + brand
                                 + "\",\"price\":1.00,\"stockQuantity\":1}"))
@@ -307,7 +305,7 @@ class ProductControllerTest {
     @Test
     void normalizesSkuOnCreate() throws Exception {
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("  sku-lower  ", "Normalized", "10.00", 1)))
                 .andExpect(status().isCreated())
@@ -319,7 +317,7 @@ class ProductControllerTest {
         seed("SKU-DUP-1", "Dup");
 
         mockMvc.perform(post("/api/products")
-                        .with(httpBasic(ADMIN_USER, ADMIN_PASSWORD))
+                        .with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("  sku-dup-1 ", "Other", "10.00", 1)))
                 .andExpect(status().isConflict());

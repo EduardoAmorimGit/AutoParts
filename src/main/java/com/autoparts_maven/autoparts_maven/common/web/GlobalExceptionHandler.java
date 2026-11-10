@@ -1,5 +1,6 @@
 package com.autoparts_maven.autoparts_maven.common.web;
 
+import com.autoparts_maven.autoparts_maven.common.ratelimit.RateLimitExceededException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -102,6 +103,15 @@ public class GlobalExceptionHandler {
         }
         problem.setProperty("errors", errors);
         return problem;
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleRateLimited(RateLimitExceededException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage());
+        problem.setTitle("Rate limited");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(exception.getRetryAfterSeconds()))
+                .body(problem);
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
