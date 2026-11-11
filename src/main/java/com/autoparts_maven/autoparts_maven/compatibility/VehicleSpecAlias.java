@@ -1,7 +1,5 @@
 package com.autoparts_maven.autoparts_maven.compatibility;
 
-import com.autoparts_maven.autoparts_maven.product.Product;
-import com.autoparts_maven.autoparts_maven.vehicle.Vehicle;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -11,37 +9,35 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
+/** Remembers an admin's manual resolution for every vehicle with the same provider data. */
 @Entity
-@Table(name = "product_vehicle")
+@Table(name = "vehicle_spec_aliases")
 @Getter
 @Setter
 @NoArgsConstructor
-public class ProductVehicle {
+public class VehicleSpecAlias {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "product_id", nullable = false)
-    private Product product;
+    @Column(nullable = false, unique = true, length = 400)
+    private String signature;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "vehicle_id", nullable = false)
-    private Vehicle vehicle;
+    @JoinColumn(name = "spec_id", nullable = false)
+    private VehicleSpec spec;
+
+    @Column(name = "created_by")
+    private Long createdBy;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    public ProductVehicle(Product product, Vehicle vehicle) {
-        this.product = product;
-        this.vehicle = vehicle;
-    }
+    private Instant createdAt;
 }

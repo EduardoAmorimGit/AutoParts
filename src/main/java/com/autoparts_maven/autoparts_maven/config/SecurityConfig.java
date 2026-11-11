@@ -34,10 +34,9 @@ public class SecurityConfig {
                         // Customer flow: plate lookup and the compatible products of a vehicle.
                         .requestMatchers(HttpMethod.POST, "/api/vehicles/lookup").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vehicles/*/products").permitAll()
-                        // Vehicles carry plates (personal data under LGPD): reading them by id or
-                        // listing the vehicles of a product is administrative.
-                        .requestMatchers(HttpMethod.GET, "/api/products/*/vehicles").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // Vehicles carry plates (personal data under LGPD): reading them by id is
+                        // administrative, as is everything under /api/admin (specs, fitments, imports).
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/products/**", "/api/vehicles/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
