@@ -25,7 +25,14 @@ public final class CompatibilityDtos {
 
     /** Customer view: RESOLVED with the spec and its validated products, or PENDING (no spec yet). */
     public record CompatibleProductsResponse(String status, VehicleSpecResponse spec,
-            PageResponse<ProductResponse> products) {
+            PageResponse<ProductResponse> products, List<KitResponse> kits) {
+    }
+
+    /** Ready-made combination of fitted products (e.g. oil change: N units of oil + oil filter). */
+    public record KitResponse(String name, BigDecimal oilCapacityLiters, List<KitItem> items, BigDecimal total) {
+    }
+
+    public record KitItem(ProductResponse product, int quantity) {
     }
 
     public record VehicleSpecResponse(Long id, String brand, String model, String version, String engine,

@@ -35,6 +35,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/vehicles/lookup").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vehicles/*/products").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                         // Vehicles carry plates (personal data under LGPD): reading them by id is
                         // administrative, as is everything under /api/admin (specs, fitments, imports).
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

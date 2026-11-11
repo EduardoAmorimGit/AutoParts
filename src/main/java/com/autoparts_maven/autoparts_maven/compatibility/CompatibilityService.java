@@ -2,6 +2,7 @@ package com.autoparts_maven.autoparts_maven.compatibility;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
 import com.autoparts_maven.autoparts_maven.compatibility.dto.CompatibilityDtos.CompatibleProductsResponse;
+import com.autoparts_maven.autoparts_maven.compatibility.dto.CompatibilityDtos.KitResponse;
 import com.autoparts_maven.autoparts_maven.compatibility.dto.CompatibilityDtos.VehicleSpecResponse;
 import com.autoparts_maven.autoparts_maven.product.Product;
 import com.autoparts_maven.autoparts_maven.product.ProductRepository;
@@ -11,6 +12,7 @@ import com.autoparts_maven.autoparts_maven.vehicle.VehicleNotFoundException;
 import com.autoparts_maven.autoparts_maven.vehicle.VehicleRepository;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -40,13 +42,15 @@ public class CompatibilityService {
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
         Optional<VehicleSpec> spec = specResolutionService.resolve(vehicle);
         if (spec.isEmpty()) {
-            return new CompatibleProductsResponse(PENDING, null, PageResponse.from(Page.empty(pageable)));
+            return new CompatibleProductsResponse(PENDING, null, PageResponse.from(Page.empty(pageable)), List.of());
         }
-        Page<ProductResponse> products = productRepository
-                .findAll(validatedActiveProductsFor(spec.get().getId()), pageable)
-                .map(ProductResponse::from);
+        Specification<Product> fitted = validatedActiveProductsFor(spec.get().getId());
+        Page<ProductResponse> products = productRepository.findAll(fitted, pageable).map(ProductResponse::from);
+        List<KitResponse> kits = OilChangeKitBuilder.build(spec.get(), productRepository.findAll(fitted))
+                .map(List::of)
+                .orElse(List.of());
         return new CompatibleProductsResponse(RESOLVED, VehicleSpecResponse.from(spec.get()),
-                PageResponse.from(products));
+                PageResponse.from(products), kits);
     }
 
     // Product is the query root, so client sort properties are validated against Product fields.
