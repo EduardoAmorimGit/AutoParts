@@ -3,8 +3,10 @@ package com.autoparts_maven.autoparts_maven.common.csv;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Minimal RFC 4180 reader for spreadsheet exports: UTF-8 (BOM tolerated), comma or semicolon
@@ -21,6 +23,15 @@ public final class CsvReader {
     }
 
     private CsvReader() {
+    }
+
+    /** Header key: uppercase, no accents, words separated by one space ("preço_unitário" -> "PRECO UNITARIO"). */
+    public static String normalizeHeader(String header) {
+        if (header == null) {
+            return "";
+        }
+        return Normalizer.normalize(header, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+                .toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]+", " ").trim();
     }
 
     public static List<Row> read(InputStream input, int maxRows) throws IOException {
