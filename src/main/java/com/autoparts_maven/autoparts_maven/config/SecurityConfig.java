@@ -36,6 +36,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/vehicles/*/products").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
+                        // Payment provider notifications are authenticated by their HMAC signature.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhooks/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/config").permitAll()
                         // Vehicles carry plates (personal data under LGPD): reading them by id is
                         // administrative, as is everything under /api/admin (specs, fitments, imports).
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
