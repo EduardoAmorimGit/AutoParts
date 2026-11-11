@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.autoparts_maven.autoparts_maven.product.ProductService;
+import com.autoparts_maven.autoparts_maven.product.ProductType;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductRequest;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductResponse;
 import com.autoparts_maven.autoparts_maven.vehicle.VehicleLookupTestConfig;
@@ -180,6 +181,29 @@ class FitmentFlowTest {
         mockMvc.perform(get("/api/vehicles/{id}/products", twin))
                 .andExpect(jsonPath("$.status").value("RESOLVED"))
                 .andExpect(jsonPath("$.spec.id").value(specId));
+    }
+
+    @Test
+    void oilChangeKitCombinesFittedOilAndFilterForTheSpecCapacity() throws Exception {
+        productService.create(new ProductRequest("KIT-OIL", "Oleo 5W30 1L", null, null, new BigDecimal("40.00"), 10,
+                true, ProductType.ENGINE_OIL, null, "5W30", null, BigDecimal.ONE, null));
+        productService.create(new ProductRequest("KIT-FLT", "Filtro de oleo", null, null, new BigDecimal("30.00"), 5,
+                true, ProductType.OIL_FILTER, null, null, null, null, null));
+        importCsv(HEADER
+                + "KIT-OIL;VW;Gol;;1.0;Flex;2017;2022;3,5;Manual do proprietario;\n"
+                + "KIT-FLT;VW;Gol;;1.0;Flex;2017;2022;3,5;Catalogo Wega p.86;\n", false)
+                .andExpect(jsonPath("$.fitmentsCreated").value(2));
+        validateAll();
+        Long vehicleId = lookup(VehicleLookupTestConfig.KNOWN_PLATE);
+
+        mockMvc.perform(get("/api/vehicles/{id}/products", vehicleId))
+                .andExpect(jsonPath("$.kits.length()").value(1))
+                .andExpect(jsonPath("$.kits[0].oilCapacityLiters").value(3.5))
+                .andExpect(jsonPath("$.kits[0].items[0].product.sku").value("KIT-OIL"))
+                .andExpect(jsonPath("$.kits[0].items[0].quantity").value(4))
+                .andExpect(jsonPath("$.kits[0].items[1].product.sku").value("KIT-FLT"))
+                .andExpect(jsonPath("$.kits[0].items[1].quantity").value(1))
+                .andExpect(jsonPath("$.kits[0].total").value(190.0));
     }
 
     @Test

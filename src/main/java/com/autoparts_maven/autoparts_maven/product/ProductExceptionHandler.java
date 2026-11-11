@@ -24,6 +24,27 @@ public class ProductExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(CategoryNotFoundException.class)
+    ProblemDetail handleCategoryNotFound(CategoryNotFoundException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+        problem.setTitle("Category not found");
+        return problem;
+    }
+
+    @ExceptionHandler(DuplicateCategoryException.class)
+    ProblemDetail handleDuplicateCategory(DuplicateCategoryException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+        problem.setTitle("Duplicate category");
+        return problem;
+    }
+
+    @ExceptionHandler({InvalidCategoryNameException.class, ProductImportException.class})
+    ProblemDetail handleInvalidCatalogInput(RuntimeException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+        problem.setTitle("Invalid request");
+        return problem;
+    }
+
     @ExceptionHandler(ProductVersionMismatchException.class)
     ProblemDetail handleVersionMismatch(ProductVersionMismatchException exception) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, exception.getMessage());
