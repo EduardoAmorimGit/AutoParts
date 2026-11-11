@@ -4,12 +4,14 @@ import com.autoparts_maven.autoparts_maven.integration.vehicle.VehicleLookupAuth
 import com.autoparts_maven.autoparts_maven.integration.vehicle.VehicleLookupProviderException;
 import com.autoparts_maven.autoparts_maven.integration.vehicle.VehicleLookupRateLimitedException;
 import com.autoparts_maven.autoparts_maven.integration.vehicle.VehicleLookupUnavailableException;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
+@Order(0)
 public class VehicleExceptionHandler {
 
     @ExceptionHandler(VehicleNotFoundException.class)

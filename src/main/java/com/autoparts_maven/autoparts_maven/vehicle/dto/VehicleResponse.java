@@ -37,7 +37,7 @@ public record VehicleResponse(
                 vehicle.getPassengerCapacity(),
                 vehicle.getEngineCc(),
                 vehicle.getOrigin(),
-                vehicle.getSource(),
+                vehicle.getSource() == null ? null : vehicle.getSource().name(),
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt()
         );

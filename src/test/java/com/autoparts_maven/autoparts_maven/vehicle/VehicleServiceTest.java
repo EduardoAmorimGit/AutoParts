@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class VehicleServiceTest {
 
+    private static final String CLIENT = "203.0.113.10";
+
     @Autowired
     private VehicleService vehicleService;
 
@@ -25,7 +27,7 @@ class VehicleServiceTest {
 
     @Test
     void lookupFetchesAndPersistsNewVehicle() {
-        VehicleResponse response = vehicleService.lookupByPlate("abc1d23");
+        VehicleResponse response = vehicleService.lookupByPlate("abc1d23", CLIENT);
 
         assertThat(response.id()).isNotNull();
         assertThat(response.plate()).isEqualTo(VehicleLookupTestConfig.KNOWN_PLATE);
@@ -37,9 +39,9 @@ class VehicleServiceTest {
 
     @Test
     void lookupReusesExistingVehicleWithoutCallingProviderAgain() {
-        VehicleResponse first = vehicleService.lookupByPlate(VehicleLookupTestConfig.KNOWN_PLATE);
+        VehicleResponse first = vehicleService.lookupByPlate(VehicleLookupTestConfig.KNOWN_PLATE, CLIENT);
 
-        VehicleResponse second = vehicleService.lookupByPlate(VehicleLookupTestConfig.KNOWN_PLATE);
+        VehicleResponse second = vehicleService.lookupByPlate(VehicleLookupTestConfig.KNOWN_PLATE, CLIENT);
 
         assertThat(second.id()).isEqualTo(first.id());
         assertThat(vehicleRepository.count()).isEqualTo(1);
@@ -47,13 +49,33 @@ class VehicleServiceTest {
 
     @Test
     void lookupRejectsInvalidPlate() {
-        assertThatThrownBy(() -> vehicleService.lookupByPlate("invalid-plate"))
+        assertThatThrownBy(() -> vehicleService.lookupByPlate("invalid-plate", CLIENT))
                 .isInstanceOf(InvalidPlateException.class);
     }
 
     @Test
     void lookupThrowsWhenProviderDoesNotFindVehicle() {
-        assertThatThrownBy(() -> vehicleService.lookupByPlate(VehicleLookupTestConfig.UNKNOWN_PLATE))
-                .isInstanceOf(VehicleNotFoundException.class);
+        assertThatThrownBy(() -> vehicleService.lookupByPlate(VehicleLookupTestConfig.UNKNOWN_PLATE, CLIENT))
+                .isInstanceOf(VehicleNotFoundException.class)
+                .hasMessageNotContaining(VehicleLookupTestConfig.UNKNOWN_PLATE);
+    }
+
+    @Test
+    void storesTheRequestedNormalizedPlateEvenWhenProviderEchoesAnotherFormat() {
+        VehicleResponse first = vehicleService.lookupByPlate("def-4g56", CLIENT);
+        VehicleResponse second = vehicleService.lookupByPlate("DEF4G56", CLIENT);
+
+        assertThat(first.plate()).isEqualTo(VehicleLookupTestConfig.REFORMATTED_PLATE);
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(vehicleRepository.findByPlate(VehicleLookupTestConfig.REFORMATTED_PLATE)).isPresent();
+        assertThat(vehicleRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void findByIdReturnsStoredVehicle() {
+        VehicleResponse looked = vehicleService.lookupByPlate(VehicleLookupTestConfig.KNOWN_PLATE, CLIENT);
+
+        assertThat(vehicleService.findById(looked.id()).plate()).isEqualTo(VehicleLookupTestConfig.KNOWN_PLATE);
+        assertThatThrownBy(() -> vehicleService.findById(999_999L)).isInstanceOf(VehicleNotFoundException.class);
     }
 }

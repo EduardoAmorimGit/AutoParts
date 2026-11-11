@@ -18,10 +18,6 @@ public class PlateLookup {
         VehicleLookupProvider lookupProvider = provider.orElseThrow(() -> new VehicleLookupDisabledException(
                 "Vehicle lookup provider is not configured"));
         return lookupProvider.lookupByPlate(normalizedPlate)
-                .orElseThrow(() -> new VehicleNotFoundException(normalizedPlate));
-    }
-
-    public boolean isEnabled() {
-        return provider.isPresent();
+                .orElseThrow(VehicleNotFoundException::forPlate);
     }
 }

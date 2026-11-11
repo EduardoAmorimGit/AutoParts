@@ -6,7 +6,12 @@ public class VehicleNotFoundException extends RuntimeException {
         super("Vehicle with id " + id + " not found");
     }
 
-    public VehicleNotFoundException(String plate) {
-        super("Vehicle with plate " + plate + " not found");
+    private VehicleNotFoundException(String message) {
+        super(message);
+    }
+
+    /** The plate is personal data (LGPD), so it is never echoed back in the error message. */
+    public static VehicleNotFoundException forPlate() {
+        return new VehicleNotFoundException("No vehicle found for the given plate");
     }
 }
