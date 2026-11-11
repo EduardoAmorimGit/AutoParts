@@ -77,6 +77,11 @@ cp .env.example .env
 | GET | `/api/products/{id}` | público | Busca produto |
 | POST | `/api/vehicles/lookup` | público | Consulta veículo pela placa |
 | GET | `/api/vehicles/{id}/products` | público | Itens confirmados para o veículo (`RESOLVED` ou `PENDING`) |
+| GET / POST / PUT / DELETE | `/api/me/addresses` | autenticado | Endereços de entrega (só cidade do Rio de Janeiro) |
+| GET / PUT / DELETE | `/api/cart`, `/api/cart/items/{productId}` | autenticado | Carrinho |
+| POST | `/api/checkout` | autenticado | Cria o pedido (header `Idempotency-Key` obrigatório) |
+| GET | `/api/orders`, `/api/orders/{id}` | autenticado | Meus pedidos |
+| POST | `/api/orders/{id}/cancel` | autenticado | Cancela pedido aguardando pagamento |
 | GET | `/actuator/health` | público | Health check |
 
 **Administração** (papel `ADMIN`)
@@ -94,6 +99,10 @@ cp .env.example .env
 | PUT | `/api/admin/vehicles/{id}/spec` | Associa o veículo a uma ficha (vale para veículos iguais) |
 | POST | `/api/admin/vehicles/rematch` | Refaz a identificação automática |
 | GET | `/api/admin/users` | Lista usuários |
+| GET / PUT | `/api/admin/settings` | Taxa de entrega fixa |
+| GET | `/api/admin/orders?status=`, `/api/admin/orders/{id}` | Pedidos |
+| GET / POST / PUT / DELETE | `/api/categories`, `/api/admin/categories` | Categorias (listagem pública) |
+| POST | `/api/admin/products/import` | Importa produtos de um CSV (`dryRun=true` só valida) |
 
 **Exemplo: login e criação de produto**
 
@@ -138,8 +147,8 @@ O GitHub Actions executa `./mvnw verify` a cada push e pull request.
 
 ## 🗺️ Próximos passos
 
-- [ ] Importação de produtos por planilha, categorias, especificações e kits
-- [ ] Carrinho e checkout (entrega no Rio de Janeiro)
+- [x] Importação de produtos por planilha, categorias, especificações e kit troca de óleo
+- [x] Carrinho e checkout (entrega no Rio de Janeiro, reserva de estoque, expiração de pedidos não pagos)
 - [ ] Pagamento (Pix, crédito e débito)
 - [ ] Painel de operação de pedidos e rastreio da entrega
 - [ ] Frontend da loja e do painel (React + TypeScript)

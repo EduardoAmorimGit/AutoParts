@@ -15,6 +15,12 @@ public final class TestAuth {
         return jwt().jwt(token -> token.subject("1")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
     }
 
+    /** A customer JWT for a user that really exists (cart and orders reference users.id). */
+    public static RequestPostProcessor customer(Long userId) {
+        return jwt().jwt(token -> token.subject(String.valueOf(userId)))
+                .authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+    }
+
     public static RequestPostProcessor customer() {
         return jwt().jwt(token -> token.subject("2")).authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
     }
