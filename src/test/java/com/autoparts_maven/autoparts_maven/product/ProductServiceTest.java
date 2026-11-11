@@ -102,6 +102,28 @@ class ProductServiceTest {
         assertThat(updated.sku()).isEqualTo("UPD-2");
     }
 
+    @Test
+    void updateWithoutActiveKeepsCurrentStatus() {
+        ProductResponse created = productService.create(request("SKU-500", "Inactive", false));
+
+        ProductResponse updated = productService.update(created.id(),
+                new ProductRequest("SKU-500", "Still inactive", null, null, new BigDecimal("10.00"), 1, null));
+
+        assertThat(updated.active()).isFalse();
+    }
+
+    @Test
+    void updateIncrementsVersionAndRejectsStaleVersion() {
+        ProductResponse created = productService.create(request("SKU-600", "Versioned", true));
+
+        ProductResponse updated = productService.update(created.id(), request("SKU-600", "V1", true), created.version());
+
+        assertThat(updated.version()).isEqualTo(created.version() + 1);
+        assertThatThrownBy(() -> productService.update(created.id(), request("SKU-600", "Stale", true),
+                created.version()))
+                .isInstanceOf(ProductVersionMismatchException.class);
+    }
+
     private ProductRequest request(String sku, String name, Boolean active) {
         return new ProductRequest(sku, name, "desc", "brand", new BigDecimal("10.00"), 1, active);
     }

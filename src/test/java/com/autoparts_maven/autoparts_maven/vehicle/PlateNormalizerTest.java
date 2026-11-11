@@ -11,6 +11,8 @@ class PlateNormalizerTest {
         assertThat(PlateNormalizer.normalize(" abc-1234 ")).isEqualTo("ABC1234");
         assertThat(PlateNormalizer.normalize("abc1d23")).isEqualTo("ABC1D23");
         assertThat(PlateNormalizer.normalize("ab c1d2 3")).isEqualTo("ABC1D23");
+        assertThat(PlateNormalizer.normalize("abc.1234")).isEqualTo("ABC1234");
+        assertThat(PlateNormalizer.normalize("\tabc-1d23\n")).isEqualTo("ABC1D23");
     }
 
     @Test

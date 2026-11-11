@@ -87,13 +87,10 @@ public class SimplesApiVehicleLookupProvider implements VehicleLookupProvider {
             return Optional.empty();
         }
 
-        String plate = textOrNull(response, "plate");
-        if (plate == null) {
-            plate = requestedPlate;
-        }
-
+        // The requested (already normalized) plate is the identity of the lookup; the plate echoed
+        // by the provider may differ in format and is never trusted as a key.
         return Optional.of(new VehicleData(
-                plate,
+                requestedPlate,
                 brand,
                 model,
                 textOrNull(info, "version"),
