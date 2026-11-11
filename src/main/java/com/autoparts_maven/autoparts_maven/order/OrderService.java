@@ -142,6 +142,47 @@ public class OrderService {
         return OrderResponse.from(order);
     }
 
+    /** What the payment module needs to know about an order before charging it. */
+    public record PayableOrder(Long id, Long userId, OrderStatus status, BigDecimal total, Instant paymentDueAt) {
+    }
+
+    /** The customer's own order, locked so concurrent payment attempts are serialized. */
+    @Transactional
+    public PayableOrder lockForPayment(Long userId, Long orderId) {
+        orderRepository.findByIdAndUserId(orderId, userId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        return new PayableOrder(order.getId(), order.getUserId(), order.getStatus(), order.getTotal(), order.getPaymentDueAt());
+    }
+
+    @Transactional
+    public PayableOrder lockForPayment(Long orderId) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        return new PayableOrder(order.getId(), order.getUserId(), order.getStatus(), order.getTotal(), order.getPaymentDueAt());
+    }
+
+    /**
+     * Keeps an order alive while a payment that can still be completed is open (e.g. a Pix that
+     * expires later than the order would): the deadline only ever moves forward.
+     */
+    @Transactional
+    public void extendPaymentDue(Long orderId, Instant atLeast) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (order.getStatus() == OrderStatus.AWAITING_PAYMENT && order.getPaymentDueAt().isBefore(atLeast)) {
+            order.setPaymentDueAt(atLeast);
+        }
+    }
+
+    /** Marks the order paid if it still awaits payment; returns false when it no longer does. */
+    @Transactional
+    public boolean markPaid(Long orderId) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+            return false;
+        }
+        order.moveTo(OrderStatus.PAID);
+        return true;
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<OrderSummary> search(OrderStatus status, Pageable pageable) {
         return PageResponse.from(orderRepository.search(status, pageable).map(OrderSummary::from));

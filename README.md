@@ -82,6 +82,11 @@ cp .env.example .env
 | POST | `/api/checkout` | autenticado | Cria o pedido (header `Idempotency-Key` obrigatório) |
 | GET | `/api/orders`, `/api/orders/{id}` | autenticado | Meus pedidos |
 | POST | `/api/orders/{id}/cancel` | autenticado | Cancela pedido aguardando pagamento |
+| POST | `/api/orders/{id}/payments/pix` | autenticado | Gera o Pix (QR Code e copia e cola) |
+| POST | `/api/orders/{id}/payments/card` | autenticado | Paga com cartão de crédito (token do Card Payment Brick) |
+| GET | `/api/orders/{id}/payments` | autenticado | Pagamentos do pedido |
+| GET | `/api/payments/config` | público | Chave pública do Mercado Pago |
+| POST | `/api/payments/webhooks/mercadopago` | assinatura HMAC | Notificações do Mercado Pago |
 | GET | `/actuator/health` | público | Health check |
 
 **Administração** (papel `ADMIN`)
@@ -101,6 +106,7 @@ cp .env.example .env
 | GET | `/api/admin/users` | Lista usuários |
 | GET / PUT | `/api/admin/settings` | Taxa de entrega fixa |
 | GET | `/api/admin/orders?status=`, `/api/admin/orders/{id}` | Pedidos |
+| GET | `/api/admin/payments/attention` | Pagamentos que precisam de atenção (estornos automáticos, divergências, chargebacks) |
 | GET / POST / PUT / DELETE | `/api/categories`, `/api/admin/categories` | Categorias (listagem pública) |
 | POST | `/api/admin/products/import` | Importa produtos de um CSV (`dryRun=true` só valida) |
 
@@ -149,7 +155,8 @@ O GitHub Actions executa `./mvnw verify` a cada push e pull request.
 
 - [x] Importação de produtos por planilha, categorias, especificações e kit troca de óleo
 - [x] Carrinho e checkout (entrega no Rio de Janeiro, reserva de estoque, expiração de pedidos não pagos)
-- [ ] Pagamento (Pix, crédito e débito)
+- [x] Pagamento com Mercado Pago (Pix e crédito) — falta validar no sandbox
+- [ ] Débito online
 - [ ] Painel de operação de pedidos e rastreio da entrega
 - [ ] Frontend da loja e do painel (React + TypeScript)
 - [ ] Documentação interativa com Swagger/OpenAPI
