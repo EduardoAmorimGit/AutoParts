@@ -23,12 +23,6 @@ class ProductUnavailableException extends RuntimeException {
     }
 }
 
-class DeliveryFeeNotConfiguredException extends RuntimeException {
-    DeliveryFeeNotConfiguredException() {
-        super("Checkout is temporarily unavailable: the delivery fee is not configured");
-    }
-}
-
 class InvalidIdempotencyKeyException extends RuntimeException {
     InvalidIdempotencyKeyException() {
         super("Header Idempotency-Key is required: 8 to 64 letters, digits, '-' or '_'");
@@ -58,11 +52,6 @@ class OrderExceptionHandler {
     @ExceptionHandler({ProductUnavailableException.class, InvalidOrderTransitionException.class})
     ProblemDetail handleConflict(RuntimeException exception) {
         return problem(HttpStatus.CONFLICT, "Conflict", exception);
-    }
-
-    @ExceptionHandler(DeliveryFeeNotConfiguredException.class)
-    ProblemDetail handleNotConfigured(DeliveryFeeNotConfiguredException exception) {
-        return problem(HttpStatus.SERVICE_UNAVAILABLE, "Checkout unavailable", exception);
     }
 
     private static ProblemDetail problem(HttpStatus status, String title, RuntimeException exception) {
