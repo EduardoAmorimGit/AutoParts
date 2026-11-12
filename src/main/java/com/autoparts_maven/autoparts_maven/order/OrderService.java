@@ -6,11 +6,11 @@ import com.autoparts_maven.autoparts_maven.cart.InsufficientStockException;
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
 import com.autoparts_maven.autoparts_maven.customer.Address;
 import com.autoparts_maven.autoparts_maven.customer.AddressService;
+import com.autoparts_maven.autoparts_maven.customer.AddressService.DeliverableAddress;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderResponse;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderSummary;
 import com.autoparts_maven.autoparts_maven.product.Product;
 import com.autoparts_maven.autoparts_maven.product.ProductRepository;
-import com.autoparts_maven.autoparts_maven.store.StoreSettingsService;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,17 +39,15 @@ public class OrderService {
     private final CartService cartService;
     private final AddressService addressService;
     private final ProductRepository productRepository;
-    private final StoreSettingsService storeSettingsService;
     private final Duration paymentTimeout;
 
     public OrderService(OrderRepository orderRepository, CartService cartService, AddressService addressService,
-            ProductRepository productRepository, StoreSettingsService storeSettingsService,
+            ProductRepository productRepository,
             @Value("${orders.payment-timeout:30m}") Duration paymentTimeout) {
         this.orderRepository = orderRepository;
         this.cartService = cartService;
         this.addressService = addressService;
         this.productRepository = productRepository;
-        this.storeSettingsService = storeSettingsService;
         this.paymentTimeout = paymentTimeout;
     }
 
@@ -58,7 +56,7 @@ public class OrderService {
      *
      * <p>Products are locked (in id order, so concurrent checkouts cannot deadlock), checked for
      * availability and their stock is decremented, i.e. reserved until payment or expiry. Prices,
-     * names and the address are copied into the order. Repeating the call with the same
+     * names, the address and the delivery fee of its region are copied into the order. Repeating the call with the same
      * Idempotency-Key returns the order already created instead of creating a second one.
      */
     @Transactional
@@ -71,8 +69,9 @@ public class OrderService {
             return OrderResponse.from(existing.get());
         }
 
-        BigDecimal deliveryFee = storeSettingsService.deliveryFee().orElseThrow(DeliveryFeeNotConfiguredException::new);
-        Address address = addressService.getDeliverable(userId, addressId);
+        DeliverableAddress deliverable = addressService.getDeliverable(userId, addressId);
+        Address address = deliverable.address();
+        BigDecimal deliveryFee = deliverable.quote().fee();
         List<CartItem> cart = cartService.items(userId);
         if (cart.isEmpty()) {
             throw new EmptyCartException();
@@ -112,6 +111,7 @@ public class OrderService {
         }
         order.setSubtotal(subtotal);
         order.setDeliveryFee(deliveryFee);
+        order.setDeliveryRegion(deliverable.quote().region());
         order.setTotal(subtotal.add(deliveryFee));
 
         Order saved = orderRepository.saveAndFlush(order);

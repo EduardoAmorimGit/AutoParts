@@ -9,25 +9,29 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.autoparts_maven.autoparts_maven.delivery.DeliveryDtos.RegionRequest;
+import com.autoparts_maven.autoparts_maven.delivery.DeliveryRegionService;
 import com.autoparts_maven.autoparts_maven.identity.AuthService;
+import com.autoparts_maven.autoparts_maven.support.CepLookupTestConfig;
 import com.autoparts_maven.autoparts_maven.identity.dto.IdentityDtos.RegisterRequest;
 import com.autoparts_maven.autoparts_maven.order.OrderService;
 import com.autoparts_maven.autoparts_maven.product.ProductService;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductRequest;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductResponse;
-import com.autoparts_maven.autoparts_maven.store.StoreSettingsService;
 import com.jayway.jsonpath.JsonPath;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -41,7 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(FakePaymentGateway.Config.class)
+@Import({FakePaymentGateway.Config.class, CepLookupTestConfig.class})
 @Transactional
 class PaymentFlowTest {
 
@@ -55,6 +59,9 @@ class PaymentFlowTest {
     private MockMvc mockMvc;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private FakePaymentGateway gateway;
 
     @Autowired
@@ -64,7 +71,7 @@ class PaymentFlowTest {
     private ProductService productService;
 
     @Autowired
-    private StoreSettingsService storeSettingsService;
+    private DeliveryRegionService deliveryRegionService;
 
     @Autowired
     private OrderService orderService;
@@ -75,11 +82,14 @@ class PaymentFlowTest {
 
     @BeforeEach
     void placeOrder() throws Exception {
+        // Start from no regions (the seeded Rio regions are rolled back with the test transaction).
+        jdbcTemplate.update("DELETE FROM delivery_regions");
         gateway.reset();
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         ana = customer(authService.register(new RegisterRequest("pay-ana-" + suffix + "@example.com", "Str0ng-pass", "Ana")).id());
         bob = customer(authService.register(new RegisterRequest("pay-bob-" + suffix + "@example.com", "Str0ng-pass", "Bob")).id());
-        storeSettingsService.updateDeliveryFee(new BigDecimal("15.00"), null);
+        deliveryRegionService.create(new RegionRequest("Centro " + suffix, new BigDecimal("15.00"), true,
+                List.of("Centro")), null);
         ProductResponse product = productService.create(
                 new ProductRequest("PAY-" + suffix, "Filtro", null, null, new BigDecimal("35.00"), 5, true));
 

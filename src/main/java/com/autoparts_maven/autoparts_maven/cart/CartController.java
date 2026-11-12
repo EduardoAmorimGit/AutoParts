@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -29,8 +30,8 @@ public class CartController {
     private final CartService cartService;
 
     @GetMapping
-    public CartResponse get(@AuthenticationPrincipal Jwt jwt) {
-        return cartService.get(userId(jwt));
+    public CartResponse get(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) Long addressId) {
+        return cartService.get(userId(jwt), addressId);
     }
 
     @PutMapping("/items/{productId}")

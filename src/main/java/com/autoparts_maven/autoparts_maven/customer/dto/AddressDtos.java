@@ -1,9 +1,11 @@
 package com.autoparts_maven.autoparts_maven.customer.dto;
 
 import com.autoparts_maven.autoparts_maven.customer.Address;
+import com.autoparts_maven.autoparts_maven.delivery.DeliveryDtos.DeliveryQuote;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 
 public final class AddressDtos {
 
@@ -26,15 +28,19 @@ public final class AddressDtos {
             @Size(max = 200) String reference) {
     }
 
+    /** Delivery region and fee of an address district; null in {@link AddressResponse} when not served yet. */
+    public record AddressDelivery(String region, BigDecimal fee) {
+    }
+
     public record AddressResponse(Long id, String label, String recipientName, String phone, String cep,
             String street, String number, String complement, String district, String city, String state,
-            String reference) {
+            String reference, AddressDelivery delivery) {
 
-        public static AddressResponse from(Address address) {
+        public static AddressResponse from(Address address, DeliveryQuote quote) {
             return new AddressResponse(address.getId(), address.getLabel(), address.getRecipientName(),
                     address.getPhone(), address.getCep(), address.getStreet(), address.getNumber(),
                     address.getComplement(), address.getDistrict(), address.getCity(), address.getState(),
-                    address.getReference());
+                    address.getReference(), quote == null ? null : new AddressDelivery(quote.region(), quote.fee()));
         }
     }
 }

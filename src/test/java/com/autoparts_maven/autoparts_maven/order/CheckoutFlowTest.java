@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.autoparts_maven.autoparts_maven.delivery.DeliveryDtos.RegionRequest;
+import com.autoparts_maven.autoparts_maven.delivery.DeliveryRegionService;
 import com.autoparts_maven.autoparts_maven.identity.AuthService;
 import com.autoparts_maven.autoparts_maven.identity.dto.IdentityDtos.RegisterRequest;
 import com.autoparts_maven.autoparts_maven.product.Product;
@@ -17,17 +19,20 @@ import com.autoparts_maven.autoparts_maven.product.ProductRepository;
 import com.autoparts_maven.autoparts_maven.product.ProductService;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductRequest;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductResponse;
-import com.autoparts_maven.autoparts_maven.store.StoreSettingsService;
+import com.autoparts_maven.autoparts_maven.support.CepLookupTestConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Import(CepLookupTestConfig.class)
 @Transactional
 class CheckoutFlowTest {
 
@@ -50,6 +56,9 @@ class CheckoutFlowTest {
     private MockMvc mockMvc;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private AuthService authService;
 
     @Autowired
@@ -59,7 +68,7 @@ class CheckoutFlowTest {
     private ProductRepository productRepository;
 
     @Autowired
-    private StoreSettingsService storeSettingsService;
+    private DeliveryRegionService deliveryRegionService;
 
     @Autowired
     private OrderService orderService;
@@ -71,10 +80,13 @@ class CheckoutFlowTest {
 
     @BeforeEach
     void setUp() {
+        // Start from no regions (the seeded Rio regions are rolled back with the test transaction).
+        jdbcTemplate.update("DELETE FROM delivery_regions");
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         ana = customer(authService.register(new RegisterRequest("ana-" + suffix + "@example.com", "Str0ng-pass", "Ana")).id());
         bob = customer(authService.register(new RegisterRequest("bob-" + suffix + "@example.com", "Str0ng-pass", "Bob")).id());
-        storeSettingsService.updateDeliveryFee(new BigDecimal("15.00"), null);
+        deliveryRegionService.create(new RegionRequest("Centro " + suffix, new BigDecimal("15.00"), true,
+                List.of("Centro", "Lapa")), null);
         filter = productService.create(new ProductRequest("CK-FLT-" + suffix, "Filtro", null, null, new BigDecimal("30.00"), 5, true));
         oil = productService.create(new ProductRequest("CK-OIL-" + suffix, "Oleo 1L", null, null, new BigDecimal("40.00"), 10, true));
     }
@@ -92,9 +104,35 @@ class CheckoutFlowTest {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
-        String wrongCity = RIO_ADDRESS.replace("Rio de Janeiro", "Sao Paulo");
-        mockMvc.perform(post("/api/me/addresses").with(ana).contentType(MediaType.APPLICATION_JSON).content(wrongCity))
+        String saoPaulo = RIO_ADDRESS.replace("20040-020", "01001-000");
+        mockMvc.perform(post("/api/me/addresses").with(ana).contentType(MediaType.APPLICATION_JSON).content(saoPaulo))
                 .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
+    void districtCityAndStateComeFromTheCepNotFromTheCustomer() throws Exception {
+        String typed = RIO_ADDRESS.replace("\"Centro\"", "\"Leblon\"").replace("Rio de Janeiro", "Niteroi")
+                .replace("\"rj\"", "\"SP\"");
+        mockMvc.perform(post("/api/me/addresses").with(ana).contentType(MediaType.APPLICATION_JSON).content(typed))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.district").value("Centro"))
+                .andExpect(jsonPath("$.city").value("Rio de Janeiro"))
+                .andExpect(jsonPath("$.state").value("RJ"))
+                .andExpect(jsonPath("$.delivery.fee").value(15.0));
+
+        String noDistrict = RIO_ADDRESS.replace("20040-020", "20000-999").replace("\"Centro\"", "\"Lapa\"");
+        mockMvc.perform(post("/api/me/addresses").with(ana).contentType(MediaType.APPLICATION_JSON).content(noDistrict))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.district").value("Lapa"));
+
+        mockMvc.perform(post("/api/me/addresses").with(ana).contentType(MediaType.APPLICATION_JSON)
+                        .content(RIO_ADDRESS.replace("20040-020", "99999-999")))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.title").value("CEP not found"));
+        mockMvc.perform(post("/api/me/addresses").with(ana).contentType(MediaType.APPLICATION_JSON)
+                        .content(RIO_ADDRESS.replace("20040-020", "20999-000")))
+                .andExpect(status().isServiceUnavailable());
+        mockMvc.perform(get("/api/me/addresses").with(ana)).andExpect(jsonPath("$.length()").value(2));
     }
 
     @Test
@@ -102,9 +140,18 @@ class CheckoutFlowTest {
         setQuantity(ana, filter.id(), 2)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.subtotal").value(60.0))
+                .andExpect(jsonPath("$.deliveryFee").doesNotExist())
+                .andExpect(jsonPath("$.total").doesNotExist())
+                .andExpect(jsonPath("$.readyForCheckout").value(true));
+
+        Long addressId = createAddress(ana);
+        mockMvc.perform(get("/api/cart").param("addressId", addressId.toString()).with(ana))
+                .andExpect(jsonPath("$.deliveryRegion").value(org.hamcrest.Matchers.startsWith("Centro")))
                 .andExpect(jsonPath("$.deliveryFee").value(15.0))
                 .andExpect(jsonPath("$.total").value(75.0))
                 .andExpect(jsonPath("$.readyForCheckout").value(true));
+        mockMvc.perform(get("/api/cart").param("addressId", addressId.toString()).with(bob))
+                .andExpect(status().isNotFound());
 
         setQuantity(ana, filter.id(), 6)
                 .andExpect(status().isConflict())
@@ -132,6 +179,7 @@ class CheckoutFlowTest {
                 .andExpect(jsonPath("$.status").value("AWAITING_PAYMENT"))
                 .andExpect(jsonPath("$.subtotal").value(220.0))
                 .andExpect(jsonPath("$.deliveryFee").value(15.0))
+                .andExpect(jsonPath("$.deliveryRegion").value(org.hamcrest.Matchers.startsWith("Centro")))
                 .andExpect(jsonPath("$.total").value(235.0))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.deliveryAddress.street").value("Rua do Ouvidor"))
@@ -187,16 +235,26 @@ class CheckoutFlowTest {
     }
 
     @Test
-    void checkoutNeedsACartAnOwnAddressAndAConfiguredFee() throws Exception {
+    void checkoutNeedsACartAnOwnAddressAndAServedDistrict() throws Exception {
         Long anasAddress = createAddress(ana);
         checkout(ana, anasAddress, "key-" + UUID.randomUUID()).andExpect(status().isBadRequest());
 
         setQuantity(bob, filter.id(), 1);
         checkout(bob, anasAddress, "key-" + UUID.randomUUID()).andExpect(status().isNotFound());
 
-        storeSettingsService.updateDeliveryFee(null, null);
+        Number bangu = JsonPath.read(mockMvc.perform(post("/api/me/addresses").with(ana)
+                        .contentType(MediaType.APPLICATION_JSON).content(RIO_ADDRESS.replace("20040-020", "21810-000")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.delivery").doesNotExist())
+                .andReturn().getResponse().getContentAsString(), "$.id");
         setQuantity(ana, filter.id(), 1);
-        checkout(ana, anasAddress, "key-" + UUID.randomUUID()).andExpect(status().isServiceUnavailable());
+        mockMvc.perform(get("/api/cart").param("addressId", bangu.toString()).with(ana))
+                .andExpect(jsonPath("$.deliveryFee").doesNotExist())
+                .andExpect(jsonPath("$.readyForCheckout").value(false));
+        checkout(ana, bangu.longValue(), "key-" + UUID.randomUUID())
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.district").value("Bangu"));
+        assertThat(stockOf(filter.id())).isEqualTo(5);
     }
 
     @Test

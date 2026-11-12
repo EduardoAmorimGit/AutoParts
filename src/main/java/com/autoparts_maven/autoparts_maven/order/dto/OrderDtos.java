@@ -33,13 +33,14 @@ public final class OrderDtos {
     }
 
     public record OrderResponse(Long id, Long userId, String status, List<OrderItemResponse> items,
-            BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal total, DeliveryAddress deliveryAddress,
+            BigDecimal subtotal, BigDecimal deliveryFee, String deliveryRegion, BigDecimal total,
+            DeliveryAddress deliveryAddress,
             Instant paymentDueAt, Instant cancelledAt, String cancelReason, Instant createdAt, Instant updatedAt) {
 
         public static OrderResponse from(Order order) {
             return new OrderResponse(order.getId(), order.getUserId(), order.getStatus().name(),
                     order.getItems().stream().map(OrderItemResponse::from).toList(),
-                    order.getSubtotal(), order.getDeliveryFee(), order.getTotal(),
+                    order.getSubtotal(), order.getDeliveryFee(), order.getDeliveryRegion(), order.getTotal(),
                     new DeliveryAddress(order.getRecipientName(), order.getPhone(), order.getCep(),
                             order.getStreet(), order.getNumber(), order.getComplement(), order.getDistrict(),
                             order.getCity(), order.getState(), order.getReference()),

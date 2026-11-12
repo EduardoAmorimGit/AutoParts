@@ -51,6 +51,10 @@ public class Order {
     @Column(name = "delivery_fee", nullable = false, precision = 10, scale = 2)
     private BigDecimal deliveryFee;
 
+    /** Name of the delivery region that priced the fee (null for orders placed before regions existed). */
+    @Column(name = "delivery_region", length = 80)
+    private String deliveryRegion;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
