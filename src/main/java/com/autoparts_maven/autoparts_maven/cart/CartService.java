@@ -6,7 +6,8 @@ import com.autoparts_maven.autoparts_maven.product.Product;
 import com.autoparts_maven.autoparts_maven.product.ProductNotFoundException;
 import com.autoparts_maven.autoparts_maven.product.ProductRepository;
 import com.autoparts_maven.autoparts_maven.product.dto.ProductResponse;
-import com.autoparts_maven.autoparts_maven.store.StoreSettingsService;
+import com.autoparts_maven.autoparts_maven.customer.AddressService;
+import com.autoparts_maven.autoparts_maven.delivery.DeliveryDtos.DeliveryQuote;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The signed-in customer's cart. It holds products and quantities only; prices, availability and
- * totals are always computed from the current catalog and settings. The authoritative stock check
+ * totals are always computed from the current catalog and delivery regions. The authoritative stock check
  * happens at checkout, under a row lock.
  */
 @Service
@@ -28,10 +29,16 @@ public class CartService {
 
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
-    private final StoreSettingsService storeSettingsService;
+    private final AddressService addressService;
 
     @Transactional(readOnly = true)
     public CartResponse get(Long userId) {
+        return get(userId, null);
+    }
+
+    /** With an {@code addressId}, also prices the delivery to that address (404 if not the user's). */
+    @Transactional(readOnly = true)
+    public CartResponse get(Long userId, Long addressId) {
         List<CartItem> items = cartItemRepository.findByUserIdOrderByIdAsc(userId);
         List<CartLine> lines = new ArrayList<>();
         BigDecimal subtotal = BigDecimal.ZERO;
@@ -46,10 +53,11 @@ public class CartService {
             subtotal = subtotal.add(lineTotal);
             count += item.getQuantity();
         }
-        Optional<BigDecimal> fee = storeSettingsService.deliveryFee();
-        boolean ready = !items.isEmpty() && allAvailable && fee.isPresent();
-        return new CartResponse(lines, count, subtotal, fee.orElse(null),
-                fee.map(subtotal::add).orElse(null), ready);
+        Optional<DeliveryQuote> quote = addressId == null ? Optional.empty() : addressService.quote(userId, addressId);
+        boolean ready = !items.isEmpty() && allAvailable && (addressId == null || quote.isPresent());
+        BigDecimal fee = quote.map(DeliveryQuote::fee).orElse(null);
+        return new CartResponse(lines, count, subtotal, quote.map(DeliveryQuote::region).orElse(null), fee,
+                fee == null ? null : subtotal.add(fee), ready);
     }
 
     /** Sets the quantity of a product (0 removes it). Rejects inactive products and quantities above stock. */

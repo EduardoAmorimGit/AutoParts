@@ -78,7 +78,7 @@ cp .env.example .env
 | POST | `/api/vehicles/lookup` | público | Consulta veículo pela placa |
 | GET | `/api/vehicles/{id}/products` | público | Itens confirmados para o veículo (`RESOLVED` ou `PENDING`) |
 | GET / POST / PUT / DELETE | `/api/me/addresses` | autenticado | Endereços de entrega (só cidade do Rio de Janeiro) |
-| GET / PUT / DELETE | `/api/cart`, `/api/cart/items/{productId}` | autenticado | Carrinho |
+| GET / PUT / DELETE | `/api/cart`, `/api/cart/items/{productId}` | autenticado | Carrinho (`GET /api/cart?addressId=` inclui a taxa de entrega do bairro) |
 | POST | `/api/checkout` | autenticado | Cria o pedido (header `Idempotency-Key` obrigatório) |
 | GET | `/api/orders`, `/api/orders/{id}` | autenticado | Meus pedidos |
 | POST | `/api/orders/{id}/cancel` | autenticado | Cancela pedido aguardando pagamento |
@@ -104,7 +104,8 @@ cp .env.example .env
 | PUT | `/api/admin/vehicles/{id}/spec` | Associa o veículo a uma ficha (vale para veículos iguais) |
 | POST | `/api/admin/vehicles/rematch` | Refaz a identificação automática |
 | GET | `/api/admin/users` | Lista usuários |
-| GET / PUT | `/api/admin/settings` | Taxa de entrega fixa |
+| GET / POST / PUT / DELETE | `/api/admin/delivery-regions` | Regiões de entrega: taxa e bairros de cada região (bairro sem região ativa com taxa definida não recebe entrega; as 5 regiões do Rio já vêm cadastradas sem taxa) |
+| GET | `/api/admin/delivery-regions/uncovered-districts` | Bairros com endereços de clientes sem região de entrega |
 | GET | `/api/admin/orders?status=`, `/api/admin/orders/{id}` | Pedidos |
 | GET | `/api/admin/payments/attention` | Pagamentos que precisam de atenção (estornos automáticos, divergências, chargebacks) |
 | GET / POST / PUT / DELETE | `/api/categories`, `/api/admin/categories` | Categorias (listagem pública) |
@@ -154,6 +155,7 @@ O GitHub Actions executa `./mvnw verify` a cada push e pull request.
 ## 🗺️ Próximos passos
 
 - [x] Importação de produtos por planilha, categorias, especificações e kit troca de óleo
+- [x] Taxa de entrega por região (bairros agrupados em regiões editáveis no painel)
 - [x] Carrinho e checkout (entrega no Rio de Janeiro, reserva de estoque, expiração de pedidos não pagos)
 - [x] Pagamento com Mercado Pago (Pix e crédito) — falta validar no sandbox
 - [ ] Débito online

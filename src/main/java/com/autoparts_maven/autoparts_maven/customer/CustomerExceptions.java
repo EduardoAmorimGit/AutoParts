@@ -1,5 +1,6 @@
 package com.autoparts_maven.autoparts_maven.customer;
 
+import com.autoparts_maven.autoparts_maven.integration.cep.CepLookupUnavailableException;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -24,9 +25,28 @@ class InvalidAddressException extends RuntimeException {
     }
 }
 
+class CepNotFoundException extends RuntimeException {
+    CepNotFoundException(String cep) {
+        super("CEP " + cep + " was not found");
+    }
+}
+
 @RestControllerAdvice
 @Order(0)
 class CustomerExceptionHandler {
+
+    @ExceptionHandler(CepNotFoundException.class)
+    ProblemDetail handleCepNotFound(CepNotFoundException exception) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, "CEP not found", exception);
+    }
+
+    @ExceptionHandler(CepLookupUnavailableException.class)
+    ProblemDetail handleCepUnavailable(CepLookupUnavailableException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "The CEP could not be verified right now; try again in a moment");
+        problem.setTitle("CEP verification unavailable");
+        return problem;
+    }
 
     @ExceptionHandler(AddressNotFoundException.class)
     ProblemDetail handleNotFound(AddressNotFoundException exception) {

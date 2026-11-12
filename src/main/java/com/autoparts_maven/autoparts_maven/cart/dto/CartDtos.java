@@ -23,8 +23,13 @@ public final class CartDtos {
     public record CartLine(ProductResponse product, int quantity, BigDecimal lineTotal, boolean available) {
     }
 
-    /** {@code deliveryFee} and {@code total} are null while the store has not configured the fee. */
-    public record CartResponse(List<CartLine> items, int itemCount, BigDecimal subtotal, BigDecimal deliveryFee,
-            BigDecimal total, boolean readyForCheckout) {
+    /**
+     * The delivery fee depends on the address: {@code deliveryRegion}, {@code deliveryFee} and
+     * {@code total} are filled only when the cart is read with the {@code addressId} of an address
+     * whose district is served, and are null otherwise. {@code readyForCheckout} is false when the
+     * cart is empty, a line is unavailable or the given address is not served.
+     */
+    public record CartResponse(List<CartLine> items, int itemCount, BigDecimal subtotal, String deliveryRegion,
+            BigDecimal deliveryFee, BigDecimal total, boolean readyForCheckout) {
     }
 }
