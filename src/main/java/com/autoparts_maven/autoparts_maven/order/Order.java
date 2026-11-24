@@ -58,6 +58,10 @@ public class Order {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
+    /** Sum of partial refunds of returned items (cancellations refund the whole payment instead). */
+    @Column(name = "refunded_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
+
     @Column(name = "recipient_name", nullable = false, length = 150)
     private String recipientName;
 

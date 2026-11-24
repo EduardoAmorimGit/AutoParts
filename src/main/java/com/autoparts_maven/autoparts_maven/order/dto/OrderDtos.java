@@ -31,11 +31,11 @@ public final class OrderDtos {
             String trackingUrl) {
     }
 
-    public record OrderItemResponse(Long productId, String sku, String productName, BigDecimal unitPrice,
+    public record OrderItemResponse(Long id, Long productId, String sku, String productName, BigDecimal unitPrice,
             int quantity, BigDecimal lineTotal) {
 
         static OrderItemResponse from(OrderItem item) {
-            return new OrderItemResponse(item.getProductId(), item.getSku(), item.getProductName(),
+            return new OrderItemResponse(item.getId(), item.getProductId(), item.getSku(), item.getProductName(),
                     item.getUnitPrice(), item.getQuantity(), item.getLineTotal());
         }
     }
@@ -46,7 +46,7 @@ public final class OrderDtos {
 
     public record OrderResponse(Long id, Long userId, String status, List<OrderItemResponse> items,
             BigDecimal subtotal, BigDecimal deliveryFee, String deliveryRegion, BigDecimal total,
-            DeliveryAddress deliveryAddress,
+            BigDecimal refundedAmount, DeliveryAddress deliveryAddress,
             Instant paymentDueAt, Instant paidAt, Instant shippedAt, String trackingUrl, Instant deliveredAt,
             Instant cancelledAt, String cancelReason, Instant createdAt, Instant updatedAt) {
 
@@ -54,7 +54,7 @@ public final class OrderDtos {
             return new OrderResponse(order.getId(), order.getUserId(), order.getStatus().name(),
                     order.getItems().stream().map(OrderItemResponse::from).toList(),
                     order.getSubtotal(), order.getDeliveryFee(), order.getDeliveryRegion(), order.getTotal(),
-                    new DeliveryAddress(order.getRecipientName(), order.getPhone(), order.getCep(),
+                    order.getRefundedAmount(), new DeliveryAddress(order.getRecipientName(), order.getPhone(), order.getCep(),
                             order.getStreet(), order.getNumber(), order.getComplement(), order.getDistrict(),
                             order.getCity(), order.getState(), order.getReference()),
                     order.getPaymentDueAt(), order.getPaidAt(), order.getShippedAt(), order.getTrackingUrl(),

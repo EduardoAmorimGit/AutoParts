@@ -253,6 +253,13 @@ public class OrderService {
         return OrderResponse.from(order);
     }
 
+    /** Records money given back for returned items (called by the payment module after the provider confirms). */
+    @Transactional
+    public void addRefunded(Long orderId, BigDecimal amount) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        order.setRefundedAmount(order.getRefundedAmount().add(amount));
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<OrderSummary> search(OrderStatus status, Pageable pageable) {
         return PageResponse.from(orderRepository.search(status, pageable).map(OrderSummary::from));
