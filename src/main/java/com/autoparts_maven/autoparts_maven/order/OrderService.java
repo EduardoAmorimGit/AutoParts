@@ -186,17 +186,28 @@ public class OrderService {
             return false;
         }
         order.moveTo(OrderStatus.PAID);
+        order.setPaidAt(Instant.now());
         return true;
     }
 
+    /** An admin starts picking and packing a paid order. */
+    @Transactional
+    public OrderResponse startPreparing(Long orderId) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        order.moveTo(OrderStatus.PREPARING);
+        return OrderResponse.from(order);
+    }
+
     /**
-     * Hands a prepared order to the courier: the units leave the shelf, so the physical stock and
-     * the reservation both go down. The admin endpoint arrives with the operations panel.
+     * Hands a prepared order to the courier with its tracking link: the units leave the shelf, so
+     * the physical stock and the reservation both go down.
      */
     @Transactional
-    public OrderResponse markShipped(Long orderId) {
+    public OrderResponse markShipped(Long orderId, String trackingUrl) {
         Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
         order.moveTo(OrderStatus.SHIPPED);
+        order.setShippedAt(Instant.now());
+        order.setTrackingUrl(trackingUrl.trim());
         Map<Long, Product> locked = lockProductsOf(order);
         for (OrderItem item : order.getItems()) {
             Product product = item.getProductId() == null ? null : locked.get(item.getProductId());
@@ -205,6 +216,25 @@ public class OrderService {
                 product.setReservedQuantity(Math.max(0, product.getReservedQuantity() - item.getQuantity()));
             }
         }
+        return OrderResponse.from(order);
+    }
+
+    @Transactional
+    public OrderResponse markDelivered(Long orderId) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        order.moveTo(OrderStatus.DELIVERED);
+        order.setDeliveredAt(Instant.now());
+        return OrderResponse.from(order);
+    }
+
+    /**
+     * An admin cancels an order that has not shipped yet; the reservation is released. Refunding
+     * a payment already received is the caller's job (payment module), after this commits.
+     */
+    @Transactional
+    public OrderResponse cancelByAdmin(Long orderId, String reason) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        cancel(order, reason.trim());
         return OrderResponse.from(order);
     }
 

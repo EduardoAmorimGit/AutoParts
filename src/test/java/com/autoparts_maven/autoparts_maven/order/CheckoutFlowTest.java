@@ -73,9 +73,6 @@ class CheckoutFlowTest {
     @Autowired
     private OrderService orderService;
 
-    @Autowired
-    private jakarta.persistence.EntityManager entityManager;
-
     private RequestPostProcessor ana;
     private RequestPostProcessor bob;
     private ProductResponse filter;
@@ -330,9 +327,8 @@ class CheckoutFlowTest {
                 new BigDecimal("30.00"), 5, true));
         orderService.markPaid(orderId.longValue());
         productRepository.flush();
-        jdbcTemplate.update("UPDATE orders SET status = 'PREPARING' WHERE id = ?", orderId.longValue());
-        entityManager.clear();
-        orderService.markShipped(orderId.longValue());
+        orderService.startPreparing(orderId.longValue());
+        orderService.markShipped(orderId.longValue(), "https://share.lalamove.com/abc");
 
         assertThat(physicalOf(filter.id())).isEqualTo(3);
         assertThat(availableOf(filter.id())).isEqualTo(3);
