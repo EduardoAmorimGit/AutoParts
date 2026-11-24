@@ -13,7 +13,10 @@ public record ProductResponse(
         String description,
         String brand,
         BigDecimal price,
+        /** Physical count on the shelf (what admins enter). */
         Integer stockQuantity,
+        /** Units that can still be sold: the physical count minus open orders. */
+        Integer availableQuantity,
         Boolean active,
         Long version,
         String type,
@@ -36,6 +39,7 @@ public record ProductResponse(
                 product.getBrand(),
                 product.getPrice(),
                 product.getStockQuantity(),
+                product.getAvailableQuantity(),
                 product.getActive(),
                 product.getVersion(),
                 product.getType() == null ? null : product.getType().name(),
