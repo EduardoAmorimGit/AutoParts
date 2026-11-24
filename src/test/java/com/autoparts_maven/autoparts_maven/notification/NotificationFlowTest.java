@@ -1,9 +1,12 @@
 package com.autoparts_maven.autoparts_maven.notification;
 
+import static com.autoparts_maven.autoparts_maven.support.TestAuth.admin;
 import static com.autoparts_maven.autoparts_maven.support.TestAuth.customer;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.autoparts_maven.autoparts_maven.delivery.DeliveryDtos.RegionRequest;
@@ -164,6 +167,18 @@ class NotificationFlowTest {
         sender.failing = false;
         outboxService.dispatchDue(Instant.now().plusSeconds(86400), 50);
         assertThat(sender.sent).isEmpty();
+
+        Long emailId = outboxRepository.findByOrderIdOrderByIdAsc(orderId).get(0).getId();
+        mockMvc.perform(get("/api/admin/emails").with(admin()))
+                .andExpect(jsonPath("$.content[?(@.id == " + emailId + ")].lastError")
+                        .value("SMTP send failed: MailSendException"));
+        mockMvc.perform(post("/api/admin/emails/{id}/retry", emailId).with(ana)).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/emails/{id}/retry", emailId).with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PENDING"));
+        mockMvc.perform(post("/api/admin/emails/{id}/retry", emailId).with(admin())).andExpect(status().isConflict());
+        assertThat(outboxService.dispatchDue(Instant.now().plusSeconds(1), 50)).isEqualTo(1);
+        mockMvc.perform(get("/api/admin/emails/orders/{id}", orderId).with(admin()))
+                .andExpect(jsonPath("$[0].status").value("SENT"));
     }
 
     private Long placeOrder() throws Exception {
