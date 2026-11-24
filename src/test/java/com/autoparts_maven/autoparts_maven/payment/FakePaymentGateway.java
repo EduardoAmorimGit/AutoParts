@@ -37,6 +37,7 @@ public class FakePaymentGateway implements PaymentGateway {
     void reset() {
         payments.clear();
         refunded.clear();
+        partialRefunds.clear();
         createCalls = 0;
         nextStatus = "pending";
         nextStatusDetail = "pending_waiting_transfer";
@@ -76,6 +77,18 @@ public class FakePaymentGateway implements PaymentGateway {
         }
         refunded.add(paymentId);
         return change(paymentId, "refunded", "refunded");
+    }
+
+    final List<String> partialRefunds = new ArrayList<>();
+
+    @Override
+    public GatewayRefund refundAmount(String paymentId, BigDecimal amount, String idempotencyKey) {
+        if (failRefunds) {
+            throw new com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGatewayException(
+                    "refund failed", true, null);
+        }
+        partialRefunds.add(paymentId + ":" + amount.toPlainString());
+        return new GatewayRefund("r-" + ids.incrementAndGet(), amount, "approved");
     }
 
     @Override
