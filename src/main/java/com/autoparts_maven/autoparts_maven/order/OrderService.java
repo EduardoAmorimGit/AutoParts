@@ -96,7 +96,7 @@ public class OrderService {
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem line : cart) {
             Product product = locked.get(line.getProduct().getId());
-            if (product == null || !Boolean.TRUE.equals(product.getActive())) {
+            if (product == null || !CartService.isSellable(product)) {
                 throw new ProductUnavailableException(line.getProduct().getSku());
             }
             if (product.getStockQuantity() < line.getQuantity()) {
