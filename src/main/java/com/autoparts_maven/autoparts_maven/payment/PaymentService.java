@@ -177,26 +177,37 @@ public class PaymentService {
         transactions.executeWithoutResult(status -> applyProviderState(localId, result));
     }
 
-    /** Result of an admin cancellation: the cancelled order and the state of its payments after refunds. */
-    public record AdminCancellation(OrderResponse order, List<PaymentResponse> payments) {
+    /** Result of a cancellation: the cancelled order and the state of its payments after refunds. */
+    public record Cancellation(OrderResponse order, List<PaymentResponse> payments) {
     }
 
     /**
-     * An admin cancels an order that has not shipped. The order is cancelled first (its own
-     * transaction, reservation released), then every approved payment is refunded at the provider,
-     * outside any transaction. A refund that fails is flagged so the admins refund it by hand; a
-     * payment approved after this point is refunded by the late-payment rule.
+     * An admin cancels an order before delivery (out of stock, delivery failed or refused). The
+     * order is cancelled first (its own transaction), then every approved payment is refunded.
      */
-    public AdminCancellation cancelOrderByAdmin(Long orderId, String reason) {
-        OrderResponse order = orderService.cancelByAdmin(orderId, reason);
-        for (Payment payment : paymentRepository.findByOrderIdOrderByIdAsc(orderId)) {
+    public Cancellation cancelOrderByAdmin(Long orderId, String reason) {
+        return refundAfterCancel(orderService.cancelByAdmin(orderId, reason));
+    }
+
+    /**
+     * The customer cancels before the order ships (right of withdrawal, CDC art. 49): any amount
+     * already paid is refunded in full, delivery fee included.
+     */
+    public Cancellation cancelOrderByCustomer(Long userId, Long orderId, String reason) {
+        return refundAfterCancel(orderService.cancelMine(userId, orderId, reason));
+    }
+
+    // Refunds run outside any transaction. A refund that fails is flagged so the admins refund it by
+    // hand; a payment approved after this point is refunded by the late-payment rule.
+    private Cancellation refundAfterCancel(OrderResponse order) {
+        for (Payment payment : paymentRepository.findByOrderIdOrderByIdAsc(order.id())) {
             if (payment.getStatus() == PaymentStatus.APPROVED && payment.getProviderPaymentId() != null) {
                 refundForCancelledOrder(payment.getId(), payment.getProviderPaymentId());
             }
         }
-        List<PaymentResponse> payments = paymentRepository.findByOrderIdOrderByIdAsc(orderId).stream()
+        List<PaymentResponse> payments = paymentRepository.findByOrderIdOrderByIdAsc(order.id()).stream()
                 .map(payment -> PaymentResponse.from(payment, null)).toList();
-        return new AdminCancellation(order, payments);
+        return new Cancellation(orderService.get(order.id()), payments);
     }
 
     private void refundForCancelledOrder(Long paymentId, String providerPaymentId) {
@@ -206,7 +217,7 @@ public class PaymentService {
         } catch (PaymentGatewayException | PaymentsDisabledException exception) {
             log.warn("Refund of payment {} for a cancelled order failed", paymentId);
             transactions.executeWithoutResult(status -> paymentRepository.findByIdForUpdate(paymentId)
-                    .ifPresent(payment -> payment.flag("Order cancelled by an admin; AUTOMATIC REFUND FAILED - refund manually")));
+                    .ifPresent(payment -> payment.flag("Order cancelled; AUTOMATIC REFUND FAILED - refund manually")));
             return;
         }
         transactions.executeWithoutResult(status -> applyProviderState(paymentId, refunded));
