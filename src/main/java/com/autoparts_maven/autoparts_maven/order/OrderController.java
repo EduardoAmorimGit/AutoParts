@@ -35,7 +35,8 @@ public class OrderController {
     public ResponseEntity<OrderResponse> checkout(@AuthenticationPrincipal Jwt jwt,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CheckoutRequest request) {
-        OrderResponse order = orderService.checkout(userId(jwt), request.addressId(), idempotencyKey);
+        OrderResponse order = orderService.checkout(userId(jwt), request.addressId(), idempotencyKey,
+                request.acceptedTermsVersion());
         return ResponseEntity.created(URI.create("/api/orders/" + order.id())).body(order);
     }
 

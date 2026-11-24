@@ -15,7 +15,8 @@ public final class OrderDtos {
     private OrderDtos() {
     }
 
-    public record CheckoutRequest(@NotNull Long addressId) {
+    /** {@code acceptedTermsVersion}: the legal documents version (GET /api/legal/documents) the customer accepted. */
+    public record CheckoutRequest(@NotNull Long addressId, @NotBlank @Size(max = 20) String acceptedTermsVersion) {
     }
 
     public record CancelRequest(@Size(max = 200) String reason) {
@@ -48,7 +49,8 @@ public final class OrderDtos {
             BigDecimal subtotal, BigDecimal deliveryFee, String deliveryRegion, BigDecimal total,
             BigDecimal refundedAmount, DeliveryAddress deliveryAddress,
             Instant paymentDueAt, Instant paidAt, Instant shippedAt, String trackingUrl, Instant deliveredAt,
-            Instant cancelledAt, String cancelReason, Instant createdAt, Instant updatedAt) {
+            Instant cancelledAt, String cancelReason, String termsVersion, Instant termsAcceptedAt,
+            Instant createdAt, Instant updatedAt) {
 
         public static OrderResponse from(Order order) {
             return new OrderResponse(order.getId(), order.getUserId(), order.getStatus().name(),
@@ -59,7 +61,7 @@ public final class OrderDtos {
                             order.getCity(), order.getState(), order.getReference()),
                     order.getPaymentDueAt(), order.getPaidAt(), order.getShippedAt(), order.getTrackingUrl(),
                     order.getDeliveredAt(), order.getCancelledAt(), order.getCancelReason(),
-                    order.getCreatedAt(), order.getUpdatedAt());
+                    order.getTermsVersion(), order.getTermsAcceptedAt(), order.getCreatedAt(), order.getUpdatedAt());
         }
     }
 

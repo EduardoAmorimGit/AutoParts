@@ -92,6 +92,13 @@ public class Order {
     @Column(length = 200)
     private String reference;
 
+    /** Version of the legal documents the customer accepted at checkout, and when. */
+    @Column(name = "terms_version", length = 20)
+    private String termsVersion;
+
+    @Column(name = "terms_accepted_at")
+    private Instant termsAcceptedAt;
+
     @Column(name = "idempotency_key", nullable = false, length = 64)
     private String idempotencyKey;
 
