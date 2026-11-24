@@ -26,15 +26,15 @@ public class FakePaymentGateway implements PaymentGateway {
 
     private final AtomicLong ids = new AtomicLong(1000);
     private final Map<String, GatewayPayment> payments = new ConcurrentHashMap<>();
-    final List<String> refunded = new ArrayList<>();
+    public final List<String> refunded = new ArrayList<>();
     int createCalls;
-    String nextStatus = "pending";
-    String nextStatusDetail = "pending_waiting_transfer";
+    public String nextStatus = "pending";
+    public String nextStatusDetail = "pending_waiting_transfer";
     BigDecimal amountOverride;
     Challenge nextChallenge;
-    boolean failRefunds;
+    public boolean failRefunds;
 
-    void reset() {
+    public void reset() {
         payments.clear();
         refunded.clear();
         partialRefunds.clear();
@@ -79,7 +79,7 @@ public class FakePaymentGateway implements PaymentGateway {
         return change(paymentId, "refunded", "refunded");
     }
 
-    final List<String> partialRefunds = new ArrayList<>();
+    public final List<String> partialRefunds = new ArrayList<>();
 
     @Override
     public GatewayRefund refundAmount(String paymentId, BigDecimal amount, String idempotencyKey) {
@@ -97,14 +97,14 @@ public class FakePaymentGateway implements PaymentGateway {
     }
 
     /** Provider id of the charge created for our payment (matched by its external reference). */
-    String providerIdFor(Object localPaymentId) {
+    public String providerIdFor(Object localPaymentId) {
         String reference = "autoparts-payment-" + localPaymentId;
         return payments.values().stream().filter(p -> reference.equals(p.externalReference()))
                 .map(GatewayPayment::id).findFirst().orElseThrow();
     }
 
     /** Simulates the provider changing a payment later (e.g. the customer paid the Pix). */
-    GatewayPayment change(String paymentId, String status, String detail) {
+    public GatewayPayment change(String paymentId, String status, String detail) {
         GatewayPayment old = payments.get(paymentId);
         GatewayPayment changed = new GatewayPayment(old.id(), status, detail, old.amount(), old.externalReference(),
                 old.pixQrCode(), old.pixQrCodeBase64(), old.pixTicketUrl(), old.expiresAt(), null);
