@@ -244,6 +244,23 @@ class ReturnFlowTest {
     }
 
     @Test
+    void requestsPastThePolicyDeadlinesShowAsOverdue() throws Exception {
+        Long id = ((Number) JsonPath.read(requestReturn(ana, "WITHDRAWAL", null, 1).andReturn().getResponse()
+                .getContentAsString(), "$.id")).longValue();
+        mockMvc.perform(get("/api/admin/returns/{id}", id).with(admin())).andExpect(jsonPath("$.overdue").value(false));
+
+        entityManager.flush();
+        jdbcTemplate.update("UPDATE return_requests SET requested_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(Instant.now().minusSeconds(3L * 24 * 3600)), id);
+        entityManager.clear();
+        mockMvc.perform(get("/api/admin/returns?status=REQUESTED").with(admin()))
+                .andExpect(jsonPath("$.content[?(@.id == " + id + ")].overdue").value(true));
+
+        mockMvc.perform(post("/api/admin/returns/{id}/approve", id).with(admin()))
+                .andExpect(jsonPath("$.overdue").value(false));
+    }
+
+    @Test
     void onlyTheOwnerOfADeliveredOrderCanReturnAndOnlyAdminsDecide() throws Exception {
         requestReturn(bob, "WITHDRAWAL", null, 1).andExpect(status().isNotFound());
         mockMvc.perform(post("/api/orders/{id}/returns", orderId).with(ana).contentType(MediaType.APPLICATION_JSON)
