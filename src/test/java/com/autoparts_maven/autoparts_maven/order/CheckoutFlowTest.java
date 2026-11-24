@@ -281,8 +281,8 @@ class CheckoutFlowTest {
 
         mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELLED"))
-                .andExpect(jsonPath("$.cancelReason").value("Cancelado pelo cliente"));
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.order.cancelReason").value("Cancelado pelo cliente"));
         assertThat(availableOf(filter.id())).isEqualTo(5);
 
         mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana)).andExpect(status().isConflict());
