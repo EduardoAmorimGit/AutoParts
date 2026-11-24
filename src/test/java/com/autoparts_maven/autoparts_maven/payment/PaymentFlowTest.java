@@ -2,6 +2,7 @@ package com.autoparts_maven.autoparts_maven.payment;
 
 import static com.autoparts_maven.autoparts_maven.support.TestAuth.admin;
 import static com.autoparts_maven.autoparts_maven.support.TestAuth.customer;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -30,6 +31,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -284,6 +286,36 @@ class PaymentFlowTest {
                 .andExpect(jsonPath("$.status").value("DELIVERED"))
                 .andExpect(jsonPath("$.paidAt").isNotEmpty())
                 .andExpect(jsonPath("$.trackingUrl").value("https://share.lalamove.com/x"));
+    }
+
+    @Test
+    void adminResolvesAFlaggedPaymentWithANote() throws Exception {
+        gateway.amountOverride = new BigDecimal("1.00");
+        gateway.nextStatus = "approved";
+        String paymentId = JsonPath.read(card(ana).andExpect(jsonPath("$.needsAttention").value(true))
+                .andReturn().getResponse().getContentAsString(), "$.id").toString();
+        Long adminId = authService.register(new RegisterRequest(
+                "pay-admin-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com", "Str0ng-pass", "Admin")).id();
+        RequestPostProcessor realAdmin = jwt().jwt(token -> token.subject(String.valueOf(adminId)))
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(realAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(realAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"Estornado pelo painel do MP\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.needsAttention").value(false))
+                .andExpect(jsonPath("$.resolvedBy").value(adminId))
+                .andExpect(jsonPath("$.resolutionNote").value("Estornado pelo painel do MP"));
+        mockMvc.perform(get("/api/admin/payments/attention").with(admin()))
+                .andExpect(jsonPath("$.content[?(@.id == " + paymentId + ")]").isEmpty());
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(realAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"de novo\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(ana)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"x\"}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
