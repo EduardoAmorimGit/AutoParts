@@ -198,6 +198,22 @@ class PaymentFlowTest {
     }
 
     @Test
+    void refundMadeAtTheProviderForAPaidOrderIsFlagged() throws Exception {
+        String paymentId = JsonPath.read(pix(ana).andReturn().getResponse().getContentAsString(), "$.id").toString();
+        String mpId = providerIdOf(paymentId);
+        gateway.change(mpId, "approved", "accredited");
+        webhook(mpId, true).andExpect(status().isOk());
+
+        gateway.change(mpId, "refunded", "refunded");
+        webhook(mpId, true).andExpect(status().isOk());
+
+        assertThat(gateway.refunded).isEmpty();
+        mockMvc.perform(get("/api/admin/payments/attention").with(admin()))
+                .andExpect(jsonPath("$.content[?(@.id == " + paymentId + ")].attentionReason").value(
+                        "Refunded at the provider while the order is PAID; review the order before shipping"));
+    }
+
+    @Test
     void approvalWithADifferentAmountDoesNotPayTheOrder() throws Exception {
         gateway.amountOverride = new BigDecimal("1.00");
         gateway.nextStatus = "approved";

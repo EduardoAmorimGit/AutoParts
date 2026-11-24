@@ -165,7 +165,24 @@ class CheckoutFlowTest {
                 new ProductRequest("CK-INACTIVE-" + filter.id(), "Off", null, null, BigDecimal.ONE, 5, false));
         setQuantity(ana, inactive.id(), 1).andExpect(status().isNotFound());
 
+        ProductResponse unpriced = productService.create(
+                new ProductRequest("CK-ZERO-" + filter.id(), "Sem preco", null, null, BigDecimal.ZERO, 5, true));
+        setQuantity(ana, unpriced.id(), 1).andExpect(status().isNotFound());
+
         mockMvc.perform(get("/api/cart")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void productRepricedToZeroAfterGoingToTheCartIsNotSold() throws Exception {
+        Long addressId = createAddress(ana);
+        setQuantity(ana, filter.id(), 1);
+        Product product = productRepository.findById(filter.id()).orElseThrow();
+        product.setPrice(BigDecimal.ZERO);
+        productRepository.flush();
+
+        mockMvc.perform(get("/api/cart").with(ana)).andExpect(jsonPath("$.readyForCheckout").value(false));
+        checkout(ana, addressId, "key-" + UUID.randomUUID()).andExpect(status().isConflict());
+        assertThat(stockOf(filter.id())).isEqualTo(5);
     }
 
     @Test

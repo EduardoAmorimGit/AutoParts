@@ -72,7 +72,12 @@ public class OrderService {
         DeliverableAddress deliverable = addressService.getDeliverable(userId, addressId);
         Address address = deliverable.address();
         BigDecimal deliveryFee = deliverable.quote().fee();
-        List<CartItem> cart = cartService.items(userId);
+        List<CartItem> cart = cartService.lockItemsForCheckout(userId);
+        // A concurrent retry with the same key may have finished while we waited for the cart lock.
+        var placedMeanwhile = orderRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
+        if (placedMeanwhile.isPresent()) {
+            return OrderResponse.from(placedMeanwhile.get());
+        }
         if (cart.isEmpty()) {
             throw new EmptyCartException();
         }
@@ -91,7 +96,7 @@ public class OrderService {
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem line : cart) {
             Product product = locked.get(line.getProduct().getId());
-            if (product == null || !Boolean.TRUE.equals(product.getActive())) {
+            if (product == null || !CartService.isSellable(product)) {
                 throw new ProductUnavailableException(line.getProduct().getSku());
             }
             if (product.getStockQuantity() < line.getQuantity()) {
