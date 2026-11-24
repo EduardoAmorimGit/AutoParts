@@ -98,10 +98,13 @@ public class CartService {
         cartItemRepository.deleteAllForUser(userId);
     }
 
-    /** Lines for checkout, read in the caller's transaction. */
-    @Transactional(readOnly = true)
-    public List<CartItem> items(Long userId) {
-        return cartItemRepository.findByUserIdOrderByIdAsc(userId);
+    /**
+     * Lines for checkout, locked in the caller's transaction until it commits, so two checkouts of
+     * the same cart (double click with new keys, two tabs) cannot both turn it into an order.
+     */
+    @Transactional
+    public List<CartItem> lockItemsForCheckout(Long userId) {
+        return cartItemRepository.findByUserIdForUpdate(userId);
     }
 
     static boolean isAvailable(Product product, int quantity) {
