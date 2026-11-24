@@ -174,6 +174,6 @@ class DeliveryRegionAdminTest {
 
     private ResultActions checkout(Number addressId) throws Exception {
         return mockMvc.perform(post("/api/checkout").with(ana).header("Idempotency-Key", "key-" + UUID.randomUUID())
-                .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"));
+                .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"test-terms\"}"));
     }
 }

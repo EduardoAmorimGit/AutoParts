@@ -1,9 +1,12 @@
 package com.autoparts_maven.autoparts_maven.payment;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
+import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.AdminCancelRequest;
+import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.CancelRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.CardPaymentRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PaymentResponse;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PixPaymentRequest;
+import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.ResolveAttentionRequest;
 import com.autoparts_maven.autoparts_maven.payment.gateway.MercadoPagoProperties;
 import com.autoparts_maven.autoparts_maven.payment.gateway.WebhookSignatureVerifier;
 import jakarta.validation.Valid;
@@ -90,10 +93,33 @@ public class PaymentController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * The customer cancels an order that has not shipped; anything already paid is refunded in full.
+     * (Lives here, not in OrderController, because cancelling a paid order means refunding it.)
+     */
+    @PostMapping("/api/orders/{orderId}/cancel")
+    public PaymentService.Cancellation cancelMine(@AuthenticationPrincipal Jwt jwt, @PathVariable Long orderId,
+            @Valid @RequestBody(required = false) CancelRequest request) {
+        return paymentService.cancelOrderByCustomer(userId(jwt), orderId, request == null ? null : request.reason());
+    }
+
+    /** Admin cancellation before delivery; approved payments are refunded automatically. */
+    @PostMapping("/api/admin/orders/{orderId}/cancel")
+    public PaymentService.Cancellation cancelOrder(@PathVariable Long orderId,
+            @Valid @RequestBody AdminCancelRequest request) {
+        return paymentService.cancelOrderByAdmin(orderId, request.reason());
+    }
+
     @GetMapping("/api/admin/payments/attention")
     public PageResponse<PaymentResponse> needingAttention(
             @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return paymentService.needingAttention(pageable);
+    }
+
+    @PostMapping("/api/admin/payments/{paymentId}/resolve")
+    public PaymentResponse resolveAttention(@AuthenticationPrincipal Jwt jwt, @PathVariable Long paymentId,
+            @Valid @RequestBody ResolveAttentionRequest request) {
+        return paymentService.resolveAttention(paymentId, userId(jwt), request.note());
     }
 
     private static Long userId(Jwt jwt) {

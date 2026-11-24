@@ -81,6 +81,25 @@ public class MercadoPagoGateway implements PaymentGateway {
     }
 
     @Override
+    public GatewayRefund refundAmount(String paymentId, BigDecimal amount, String idempotencyKey) {
+        try {
+            JsonNode refund = restClient.post().uri("/v1/payments/{id}/refunds", paymentId)
+                    .header("X-Idempotency-Key", idempotencyKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("amount", amount))
+                    .retrieve()
+                    .body(JsonNode.class);
+            if (refund == null) {
+                throw new PaymentGatewayException("Empty refund response", true, null);
+            }
+            return new GatewayRefund(refund.path("id").asString(null), refund.path("amount").decimalValue(),
+                    refund.path("status").asString(null));
+        } catch (RestClientException exception) {
+            throw translate("refund", exception);
+        }
+    }
+
+    @Override
     public String publicKey() {
         return properties.getPublicKey();
     }

@@ -29,6 +29,12 @@ class InvalidIdempotencyKeyException extends RuntimeException {
     }
 }
 
+class TermsNotAcceptedException extends RuntimeException {
+    TermsNotAcceptedException(String current) {
+        super("Accept the current terms and policies (version " + current + ") to place the order");
+    }
+}
+
 class InvalidOrderTransitionException extends RuntimeException {
     InvalidOrderTransitionException(Long id, OrderStatus from, OrderStatus to) {
         super("Order " + id + " cannot go from " + from + " to " + to);
@@ -47,6 +53,11 @@ class OrderExceptionHandler {
     @ExceptionHandler({EmptyCartException.class, InvalidIdempotencyKeyException.class})
     ProblemDetail handleBadRequest(RuntimeException exception) {
         return problem(HttpStatus.BAD_REQUEST, "Invalid request", exception);
+    }
+
+    @ExceptionHandler(TermsNotAcceptedException.class)
+    ProblemDetail handleTerms(TermsNotAcceptedException exception) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, "Terms not accepted", exception);
     }
 
     @ExceptionHandler({ProductUnavailableException.class, InvalidOrderTransitionException.class})

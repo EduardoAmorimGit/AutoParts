@@ -5,6 +5,7 @@ import com.autoparts_maven.autoparts_maven.identity.AuthService;
 import com.autoparts_maven.autoparts_maven.order.OrderService;
 import com.autoparts_maven.autoparts_maven.order.OrderService.PayableOrder;
 import com.autoparts_maven.autoparts_maven.order.OrderStatus;
+import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderResponse;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.CardPaymentRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PaymentResponse;
 import com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGateway;
@@ -13,6 +14,7 @@ import com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGateway.Gatewa
 import com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGateway.Payer;
 import com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGateway.PixCharge;
 import com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGatewayException;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +25,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,10 +55,15 @@ public class PaymentService {
     private final AuthService authService;
     private final TransactionTemplate transactions;
     private final int maxInstallments;
+    private final ApplicationEventPublisher events;
+    private final RefundRepository refundRepository;
 
     public PaymentService(Optional<PaymentGateway> gateway, PaymentRepository paymentRepository,
             OrderService orderService, AuthService authService, TransactionTemplate transactions,
-            @Value("${payments.max-installments:1}") int maxInstallments) {
+            @Value("${payments.max-installments:1}") int maxInstallments, ApplicationEventPublisher events,
+            RefundRepository refundRepository) {
+        this.events = events;
+        this.refundRepository = refundRepository;
         this.gateway = gateway;
         this.paymentRepository = paymentRepository;
         this.orderService = orderService;
@@ -173,6 +181,140 @@ public class PaymentService {
         transactions.executeWithoutResult(status -> applyProviderState(localId, result));
     }
 
+    /** Result of a cancellation: the cancelled order and the state of its payments after refunds. */
+    public record Cancellation(OrderResponse order, List<PaymentResponse> payments) {
+    }
+
+    /**
+     * An admin cancels an order before delivery (out of stock, delivery failed or refused). The
+     * order is cancelled first (its own transaction), then every approved payment is refunded.
+     */
+    public Cancellation cancelOrderByAdmin(Long orderId, String reason) {
+        return refundAfterCancel(orderService.cancelByAdmin(orderId, reason));
+    }
+
+    /**
+     * The customer cancels before the order ships (right of withdrawal, CDC art. 49): any amount
+     * already paid is refunded in full, delivery fee included.
+     */
+    public Cancellation cancelOrderByCustomer(Long userId, Long orderId, String reason) {
+        return refundAfterCancel(orderService.cancelMine(userId, orderId, reason));
+    }
+
+    // Refunds run outside any transaction. A refund that fails is flagged so the admins refund it by
+    // hand; a payment approved after this point is refunded by the late-payment rule.
+    private Cancellation refundAfterCancel(OrderResponse order) {
+        for (Payment payment : paymentRepository.findByOrderIdOrderByIdAsc(order.id())) {
+            if (payment.getStatus() == PaymentStatus.APPROVED && payment.getProviderPaymentId() != null) {
+                refundForCancelledOrder(payment.getId(), payment.getProviderPaymentId());
+            }
+        }
+        List<PaymentResponse> payments = paymentRepository.findByOrderIdOrderByIdAsc(order.id()).stream()
+                .map(payment -> PaymentResponse.from(payment, null)).toList();
+        return new Cancellation(orderService.get(order.id()), payments);
+    }
+
+    private void refundForCancelledOrder(Long paymentId, String providerPaymentId) {
+        GatewayPayment refunded;
+        try {
+            refunded = gateway().refund(providerPaymentId, UUID.randomUUID().toString());
+        } catch (PaymentGatewayException | PaymentsDisabledException exception) {
+            log.warn("Refund of payment {} for a cancelled order failed", paymentId);
+            transactions.executeWithoutResult(status -> paymentRepository.findByIdForUpdate(paymentId)
+                    .ifPresent(payment -> payment.flag("Order cancelled; AUTOMATIC REFUND FAILED - refund manually")));
+            return;
+        }
+        transactions.executeWithoutResult(status -> applyProviderState(paymentId, refunded));
+    }
+
+    /** An admin closes a flagged payment after handling it (refund done by hand, chargeback answered...). */
+    @Transactional
+    public PaymentResponse resolveAttention(Long paymentId, Long adminId, String note) {
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        if (!payment.isNeedsAttention()) {
+            throw new PaymentNotFlaggedException(paymentId);
+        }
+        payment.resolve(adminId, note.trim(), Instant.now());
+        return PaymentResponse.from(payment, null);
+    }
+
+    /** Outcome of a return refund. */
+    public record RefundOutcome(Long refundId, BigDecimal amount, String status) {
+    }
+
+    /**
+     * Refunds {@code amount} of the order's approved payment for a return request. Idempotent per
+     * return request: a retry after a failure reuses the same provider idempotency key, so a refund
+     * that did reach the provider before a timeout is never paid twice. A failure is flagged and
+     * re-thrown (the admin sees 502/503 and may retry).
+     */
+    public RefundOutcome refundForReturn(Long orderId, Long returnRequestId, BigDecimal amount, Long adminId) {
+        PaymentGateway provider = gateway();
+        record Claim(Long refundId, Long paymentId, String providerPaymentId, String key, boolean alreadyDone) {
+        }
+        Claim claim = transactions.execute(status -> {
+            Optional<Refund> existing = refundRepository.findByReturnRequestId(returnRequestId);
+            if (existing.isPresent() && existing.get().getStatus() == Refund.Status.SUCCEEDED) {
+                Refund done = existing.get();
+                return new Claim(done.getId(), done.getPaymentId(), null, done.getIdempotencyKey(), true);
+            }
+            Payment payment = paymentRepository.findByOrderIdOrderByIdAsc(orderId).stream()
+                    .filter(p -> p.getStatus() == PaymentStatus.APPROVED && p.getProviderPaymentId() != null)
+                    .findFirst()
+                    .flatMap(p -> paymentRepository.findByIdForUpdate(p.getId()))
+                    .orElseThrow(() -> new NoRefundablePaymentException(orderId));
+            Refund refund = existing.orElseGet(Refund::new);
+            BigDecimal alreadyCommitted = refundRepository.sumNotFailed(payment.getId());
+            if (refund.getId() != null && refund.getStatus() == Refund.Status.PENDING) {
+                alreadyCommitted = alreadyCommitted.subtract(refund.getAmount());
+            }
+            if (alreadyCommitted.add(amount).compareTo(payment.getAmount()) > 0) {
+                throw new RefundExceedsPaymentException(orderId);
+            }
+            if (refund.getId() == null) {
+                refund.setOrderId(orderId);
+                refund.setPaymentId(payment.getId());
+                refund.setReturnRequestId(returnRequestId);
+                refund.setIdempotencyKey(UUID.randomUUID().toString());
+                refund.setCreatedBy(adminId);
+            }
+            refund.setAmount(amount);
+            refund.setStatus(Refund.Status.PENDING);
+            refund.setLastError(null);
+            Refund saved = refundRepository.saveAndFlush(refund);
+            return new Claim(saved.getId(), payment.getId(), payment.getProviderPaymentId(), saved.getIdempotencyKey(), false);
+        });
+        if (claim.alreadyDone()) {
+            return new RefundOutcome(claim.refundId(), amount, Refund.Status.SUCCEEDED.name());
+        }
+
+        PaymentGateway.GatewayRefund result;
+        try {
+            result = provider.refundAmount(claim.providerPaymentId(), amount, claim.key());
+        } catch (PaymentGatewayException exception) {
+            transactions.executeWithoutResult(status -> {
+                refundRepository.findById(claim.refundId()).ifPresent(refund -> {
+                    refund.setStatus(Refund.Status.FAILED);
+                    refund.setLastError(exception.isUnavailable() ? "provider unavailable" : "provider refused");
+                });
+                paymentRepository.findByIdForUpdate(claim.paymentId()).ifPresent(payment ->
+                        payment.flag("Refund for return #" + returnRequestId + " failed; retry it or refund manually"));
+            });
+            throw exception;
+        }
+        transactions.executeWithoutResult(status -> {
+            Refund refund = refundRepository.findById(claim.refundId()).orElseThrow();
+            refund.setStatus(Refund.Status.SUCCEEDED);
+            refund.setProviderRefundId(result.id());
+            refund.setCompletedAt(Instant.now());
+            orderService.addRefunded(orderId, amount);
+            Payment payment = paymentRepository.findById(claim.paymentId()).orElseThrow();
+            events.publishEvent(new PaymentRefundedEvent(orderId, payment.getId(), amount, payment.getMethod().name()));
+        });
+        return new RefundOutcome(claim.refundId(), amount, Refund.Status.SUCCEEDED.name());
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<PaymentResponse> needingAttention(Pageable pageable) {
         return PageResponse.from(paymentRepository.findByNeedsAttentionTrue(pageable)
@@ -218,9 +360,15 @@ public class PaymentService {
             payment.flag("Chargeback opened by the cardholder");
         } else if (status == PaymentStatus.REFUNDED && payment.getRefundedAt() == null) {
             payment.setRefundedAt(Instant.now());
+            // Partial refunds of returns that add up to the whole payment were already recorded and
+            // e-mailed by refundForReturn: nothing unexpected happened.
+            boolean refundedByReturns = refundRepository.sumSucceeded(payment.getId()).compareTo(payment.getAmount()) >= 0;
+            if (!refundedByReturns) {
+                publishRefund(payment);
+            }
             // Refunded outside our automatic flow (e.g. in the Mercado Pago panel): the order is
             // still PAID and would be shipped without money, so the admins must review it.
-            if (previous == PaymentStatus.APPROVED && order.status() != OrderStatus.CANCELLED) {
+            if (previous == PaymentStatus.APPROVED && order.status() != OrderStatus.CANCELLED && !refundedByReturns) {
                 payment.flag("Refunded at the provider while the order is " + order.status()
                         + "; review the order before shipping");
             }
@@ -239,10 +387,16 @@ public class PaymentService {
             payment.setProviderStatus(refunded.status());
             payment.setRefundedAt(Instant.now());
             payment.flag(reason + "; refunded automatically");
+            publishRefund(payment);
         } catch (PaymentGatewayException exception) {
             payment.flag(reason + "; AUTOMATIC REFUND FAILED - refund manually");
         }
         log.warn("Payment {} for order {}: {}", payment.getId(), order.id(), reason);
+    }
+
+    private void publishRefund(Payment payment) {
+        events.publishEvent(new PaymentRefundedEvent(payment.getOrderId(), payment.getId(), payment.getAmount(),
+                payment.getMethod().name()));
     }
 
     private Payment newAttempt(PayableOrder order, Payment.Method method, Instant expiresAt) {

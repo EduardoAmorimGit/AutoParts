@@ -58,6 +58,10 @@ public class Order {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
+    /** Sum of partial refunds of returned items (cancellations refund the whole payment instead). */
+    @Column(name = "refunded_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
+
     @Column(name = "recipient_name", nullable = false, length = 150)
     private String recipientName;
 
@@ -88,6 +92,13 @@ public class Order {
     @Column(length = 200)
     private String reference;
 
+    /** Version of the legal documents the customer accepted at checkout, and when. */
+    @Column(name = "terms_version", length = 20)
+    private String termsVersion;
+
+    @Column(name = "terms_accepted_at")
+    private Instant termsAcceptedAt;
+
     @Column(name = "idempotency_key", nullable = false, length = 64)
     private String idempotencyKey;
 
@@ -99,6 +110,19 @@ public class Order {
 
     @Column(name = "cancel_reason", length = 200)
     private String cancelReason;
+
+    @Column(name = "paid_at")
+    private Instant paidAt;
+
+    @Column(name = "shipped_at")
+    private Instant shippedAt;
+
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
+    /** Courier tracking link pasted by an admin when the order ships. */
+    @Column(name = "tracking_url", length = 500)
+    private String trackingUrl;
 
     @Version
     @Column(nullable = false)
