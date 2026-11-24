@@ -173,8 +173,8 @@ class ReturnFlowTest {
         requestReturn(ana, "DEFECT", null, 1).andExpect(status().isUnprocessableContent());
         String defect = requestReturn(ana, "DEFECT", "Filtro vazando na rosca", 1)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.deliveryFeeAmount").value(0))
-                .andExpect(jsonPath("$.refundAmount").value(35.0))
+                .andExpect(jsonPath("$.deliveryFeeAmount").value(15.0))
+                .andExpect(jsonPath("$.refundAmount").value(50.0))
                 .andExpect(jsonPath("$.legalDeadline").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
         Long defectId = ((Number) JsonPath.read(defect, "$.id")).longValue();

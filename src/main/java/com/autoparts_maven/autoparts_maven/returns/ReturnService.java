@@ -35,12 +35,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <ul>
  *   <li>WITHDRAWAL (art. 49): until the end of the {@code returns.withdrawal-days}-th day after
- *       delivery (Rio time), no reason needed; refund of the items plus the delivery fee (once per order).
+ *       delivery (Rio time), no reason needed.
  *   <li>DEFECT (arts. 18 and 26): never blocked by a deadline here (hidden defects count from their
  *       discovery); a description is mandatory and the admins decide between refund and replacement.
  * </ul>
  *
- * The amount due is computed from the order snapshot when the request is opened.
+ * The amount due is computed from the order snapshot when the request is opened: the items, plus
+ * the delivery fee on the first return of the order that is not rejected.
  */
 @Service
 public class ReturnService {
@@ -117,8 +118,9 @@ public class ReturnService {
             itemsAmount = itemsAmount.add(item.unitPrice().multiply(BigDecimal.valueOf(entry.getValue())));
         }
 
-        BigDecimal fee = request.type() == ReturnType.WITHDRAWAL && !feeAlreadyRefunded(orderId)
-                ? order.deliveryFee() : BigDecimal.ZERO;
+        // The delivery fee goes back with the first return of the order, whatever its type: a withdrawal
+        // (CDC art. 49) and a defect or wrong part (art. 18, "a quantia paga") both entitle the customer to it.
+        BigDecimal fee = feeAlreadyRefunded(orderId) ? BigDecimal.ZERO : order.deliveryFee();
         entity.setOrderId(orderId);
         entity.setUserId(userId);
         entity.setType(request.type());
