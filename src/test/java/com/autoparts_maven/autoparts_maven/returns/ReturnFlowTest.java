@@ -110,7 +110,7 @@ class ReturnFlowTest {
         mockMvc.perform(put("/api/cart/items/{id}", productId).with(ana)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":2}")).andExpect(status().isOk());
         String order = mockMvc.perform(post("/api/checkout").with(ana).header("Idempotency-Key", "key-" + suffix)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"test-terms\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         orderId = ((Number) JsonPath.read(order, "$.id")).longValue();
         orderItemId = ((Number) JsonPath.read(order, "$.items[0].id")).longValue();

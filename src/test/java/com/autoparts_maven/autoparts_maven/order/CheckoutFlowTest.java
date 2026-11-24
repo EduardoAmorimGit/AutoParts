@@ -229,8 +229,29 @@ class CheckoutFlowTest {
         assertThat(second).isEqualTo(first);
         assertThat(availableOf(filter.id())).isEqualTo(4);
         mockMvc.perform(post("/api/checkout").with(ana).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"addressId\":" + addressId + "}"))
+                        .content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"test-terms\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void checkoutRequiresTheCurrentTermsAndRecordsTheAcceptance() throws Exception {
+        Long addressId = createAddress(ana);
+        setQuantity(ana, filter.id(), 1);
+
+        mockMvc.perform(post("/api/checkout").with(ana).header("Idempotency-Key", "key-" + UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/checkout").with(ana).header("Idempotency-Key", "key-" + UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"2020-01-01\"}"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.title").value("Terms not accepted"));
+        assertThat(availableOf(filter.id())).isEqualTo(5);
+
+        checkout(ana, addressId, "key-" + UUID.randomUUID())
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.termsVersion").value("test-terms"))
+                .andExpect(jsonPath("$.termsAcceptedAt").isNotEmpty());
     }
 
     @Test
@@ -384,7 +405,7 @@ class CheckoutFlowTest {
 
     private ResultActions checkout(RequestPostProcessor user, Long addressId, String key) throws Exception {
         return mockMvc.perform(post("/api/checkout").with(user).header("Idempotency-Key", key)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"));
+                .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"test-terms\"}"));
     }
 
     private int availableOf(Long productId) {

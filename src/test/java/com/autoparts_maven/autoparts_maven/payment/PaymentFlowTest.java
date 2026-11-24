@@ -107,7 +107,7 @@ class PaymentFlowTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}")).andExpect(status().isOk());
         Number id = JsonPath.read(mockMvc.perform(post("/api/checkout").with(ana)
                         .header("Idempotency-Key", "key-" + suffix)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"test-terms\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
         orderId = id.longValue();
     }
