@@ -218,6 +218,12 @@ public class PaymentService {
             payment.flag("Chargeback opened by the cardholder");
         } else if (status == PaymentStatus.REFUNDED && payment.getRefundedAt() == null) {
             payment.setRefundedAt(Instant.now());
+            // Refunded outside our automatic flow (e.g. in the Mercado Pago panel): the order is
+            // still PAID and would be shipped without money, so the admins must review it.
+            if (previous == PaymentStatus.APPROVED && order.status() != OrderStatus.CANCELLED) {
+                payment.flag("Refunded at the provider while the order is " + order.status()
+                        + "; review the order before shipping");
+            }
         }
         return paymentRepository.saveAndFlush(payment);
     }
