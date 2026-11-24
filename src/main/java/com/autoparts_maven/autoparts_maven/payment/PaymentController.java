@@ -2,6 +2,7 @@ package com.autoparts_maven.autoparts_maven.payment;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.AdminCancelRequest;
+import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.CancelRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.CardPaymentRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PaymentResponse;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PixPaymentRequest;
@@ -92,9 +93,19 @@ public class PaymentController {
         return ResponseEntity.ok().build();
     }
 
-    /** Admin cancellation of an order not shipped yet; approved payments are refunded automatically. */
+    /**
+     * The customer cancels an order that has not shipped; anything already paid is refunded in full.
+     * (Lives here, not in OrderController, because cancelling a paid order means refunding it.)
+     */
+    @PostMapping("/api/orders/{orderId}/cancel")
+    public PaymentService.Cancellation cancelMine(@AuthenticationPrincipal Jwt jwt, @PathVariable Long orderId,
+            @Valid @RequestBody(required = false) CancelRequest request) {
+        return paymentService.cancelOrderByCustomer(userId(jwt), orderId, request == null ? null : request.reason());
+    }
+
+    /** Admin cancellation before delivery; approved payments are refunded automatically. */
     @PostMapping("/api/admin/orders/{orderId}/cancel")
-    public PaymentService.AdminCancellation cancelOrder(@PathVariable Long orderId,
+    public PaymentService.Cancellation cancelOrder(@PathVariable Long orderId,
             @Valid @RequestBody AdminCancelRequest request) {
         return paymentService.cancelOrderByAdmin(orderId, request.reason());
     }

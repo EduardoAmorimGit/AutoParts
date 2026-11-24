@@ -8,11 +8,14 @@ import com.autoparts_maven.autoparts_maven.order.OrderEvent;
 import com.autoparts_maven.autoparts_maven.order.OrderService;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderResponse;
 import com.autoparts_maven.autoparts_maven.payment.PaymentRefundedEvent;
+import com.autoparts_maven.autoparts_maven.returns.ReturnEvent;
+import com.autoparts_maven.autoparts_maven.returns.ReturnService;
+import com.autoparts_maven.autoparts_maven.returns.dto.ReturnDtos.ReturnResponse;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns order and refund events into outbox e-mails. Runs synchronously inside the publishing
+ * Turns order, return and refund events into outbox e-mails. Runs synchronously inside the publishing
  * transaction: the e-mail is stored if and only if the change is committed.
  */
 @Component
@@ -22,9 +25,11 @@ class OrderEmailListener {
     private final AuthService authService;
     private final OrderEmails emails;
     private final EmailOutboxService outbox;
+    private final ReturnService returnService;
 
     OrderEmailListener(OrderService orderService, AuthService authService, OrderEmails emails,
-            EmailOutboxService outbox) {
+            EmailOutboxService outbox, ReturnService returnService) {
+        this.returnService = returnService;
         this.orderService = orderService;
         this.authService = authService;
         this.emails = emails;
@@ -43,6 +48,22 @@ class OrderEmailListener {
             case CANCELLED -> emails.cancelled(customer.fullName(), order);
         };
         outbox.enqueue(new Email(customer.id(), order.id(), "ORDER_" + event.type().name(), customer.email(),
+                content.subject(), content.body()));
+    }
+
+    @EventListener
+    void on(ReturnEvent event) {
+        ReturnResponse request = returnService.get(event.returnRequestId());
+        OrderResponse order = orderService.get(request.orderId());
+        UserResponse customer = authService.me(order.userId());
+        Content content = switch (event.type()) {
+            case REQUESTED -> emails.returnRequested(customer.fullName(), request);
+            case APPROVED -> emails.returnApproved(customer.fullName(), request);
+            case RECEIVED -> emails.returnReceived(customer.fullName(), request);
+            case REPLACED -> emails.returnReplaced(customer.fullName(), request);
+            case REJECTED -> emails.returnRejected(customer.fullName(), request);
+        };
+        outbox.enqueue(new Email(customer.id(), order.id(), "RETURN_" + event.type().name(), customer.email(),
                 content.subject(), content.body()));
     }
 

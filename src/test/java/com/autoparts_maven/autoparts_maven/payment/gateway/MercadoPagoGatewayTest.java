@@ -125,4 +125,21 @@ class MercadoPagoGatewayTest {
         assertThat(gateway.refund("77", "refund-key").status()).isEqualTo("refunded");
         server.verify();
     }
+
+    @Test
+    void partialRefundSendsTheAmountAndReturnsTheRefund() {
+        server.expect(requestTo(BASE + "/v1/payments/77/refunds"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Idempotency-Key", "partial-key"))
+                .andExpect(jsonPath("$.amount").value(35.5))
+                .andRespond(withSuccess("{\"id\": 9001, \"payment_id\": 77, \"amount\": 35.50, \"status\": \"approved\"}",
+                        MediaType.APPLICATION_JSON));
+
+        PaymentGateway.GatewayRefund refund = gateway.refundAmount("77", new BigDecimal("35.50"), "partial-key");
+
+        assertThat(refund.id()).isEqualTo("9001");
+        assertThat(refund.amount()).isEqualByComparingTo("35.50");
+        assertThat(refund.status()).isEqualTo("approved");
+        server.verify();
+    }
 }

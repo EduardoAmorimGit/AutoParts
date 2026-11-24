@@ -78,6 +78,9 @@ class PaymentFlowTest {
     @Autowired
     private OrderService orderService;
 
+    @Autowired
+    private com.autoparts_maven.autoparts_maven.product.ProductRepository productRepository;
+
     private RequestPostProcessor ana;
     private RequestPostProcessor bob;
     private Long orderId;
@@ -104,7 +107,7 @@ class PaymentFlowTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}")).andExpect(status().isOk());
         Number id = JsonPath.read(mockMvc.perform(post("/api/checkout").with(ana)
                         .header("Idempotency-Key", "key-" + suffix)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + ",\"acceptedTermsVersion\":\"test-terms\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
         orderId = id.longValue();
     }
@@ -237,7 +240,7 @@ class PaymentFlowTest {
     }
 
     @Test
-    void failedRefundOnAdminCancelIsFlaggedAndShippedOrdersCannotBeCancelled() throws Exception {
+    void failedRefundOnAdminCancelIsFlagged() throws Exception {
         gateway.nextStatus = "approved";
         card(ana).andExpect(jsonPath("$.status").value("APPROVED"));
         gateway.failRefunds = true;
@@ -248,7 +251,7 @@ class PaymentFlowTest {
                 .andExpect(jsonPath("$.order.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.payments[0].status").value("APPROVED"))
                 .andExpect(jsonPath("$.payments[0].attentionReason").value(
-                        "Order cancelled by an admin; AUTOMATIC REFUND FAILED - refund manually"));
+                        "Order cancelled; AUTOMATIC REFUND FAILED - refund manually"));
 
         mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -276,9 +279,7 @@ class PaymentFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SHIPPED"))
                 .andExpect(jsonPath("$.shippedAt").isNotEmpty());
-        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"tarde\"}"))
-                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana)).andExpect(status().isConflict());
         mockMvc.perform(post("/api/admin/orders/{id}/deliver", orderId).with(admin()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.deliveredAt").isNotEmpty());
 
@@ -316,6 +317,41 @@ class PaymentFlowTest {
         mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(ana)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"x\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void customerCancellingAPaidOrderBeforeShippingGetsAFullRefund() throws Exception {
+        gateway.nextStatus = "approved";
+        String paymentId = JsonPath.read(card(ana).andReturn().getResponse().getContentAsString(), "$.id").toString();
+        mockMvc.perform(post("/api/admin/orders/{id}/prepare", orderId).with(admin())).andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.payments[0].status").value("REFUNDED"));
+        assertThat(gateway.refunded).containsExactly(providerIdOf(paymentId));
+    }
+
+    @Test
+    void customerCannotCancelAShippedOrderButAdminCanWhenDeliveryFails() throws Exception {
+        gateway.nextStatus = "approved";
+        card(ana).andExpect(jsonPath("$.status").value("APPROVED"));
+        mockMvc.perform(post("/api/admin/orders/{id}/prepare", orderId).with(admin())).andExpect(status().isOk());
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"https://share.lalamove.com/x\"}"))
+                .andExpect(status().isOk());
+        Long productId = ((Number) JsonPath.read(mockMvc.perform(get("/api/orders/{id}", orderId).with(ana))
+                .andReturn().getResponse().getContentAsString(), "$.items[0].productId")).longValue();
+        int shelfAfterShipping = productRepository.findById(productId).orElseThrow().getStockQuantity();
+
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana)).andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Cliente ausente na entrega\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.payments[0].status").value("REFUNDED"));
+        productRepository.flush();
+        assertThat(productRepository.findById(productId).orElseThrow().getStockQuantity()).isEqualTo(shelfAfterShipping + 1);
     }
 
     @Test

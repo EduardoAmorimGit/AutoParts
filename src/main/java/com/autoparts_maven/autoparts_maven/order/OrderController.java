@@ -1,7 +1,6 @@
 package com.autoparts_maven.autoparts_maven.order;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
-import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.CancelRequest;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.CheckoutRequest;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderResponse;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderSummary;
@@ -21,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Customer checkout and own orders (any authenticated user). */
+/** Customer checkout and own orders (any authenticated user). Cancelling (with refund) is in PaymentController. */
 @RestController
 @RequiredArgsConstructor
 public class OrderController {
@@ -36,7 +35,8 @@ public class OrderController {
     public ResponseEntity<OrderResponse> checkout(@AuthenticationPrincipal Jwt jwt,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CheckoutRequest request) {
-        OrderResponse order = orderService.checkout(userId(jwt), request.addressId(), idempotencyKey);
+        OrderResponse order = orderService.checkout(userId(jwt), request.addressId(), idempotencyKey,
+                request.acceptedTermsVersion());
         return ResponseEntity.created(URI.create("/api/orders/" + order.id())).body(order);
     }
 
@@ -49,12 +49,6 @@ public class OrderController {
     @GetMapping("/api/orders/{id}")
     public OrderResponse getMine(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         return orderService.getMine(userId(jwt), id);
-    }
-
-    @PostMapping("/api/orders/{id}/cancel")
-    public OrderResponse cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
-            @Valid @RequestBody(required = false) CancelRequest request) {
-        return orderService.cancelMine(userId(jwt), id, request == null ? null : request.reason());
     }
 
     private static Long userId(Jwt jwt) {

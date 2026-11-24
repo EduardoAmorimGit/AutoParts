@@ -38,6 +38,13 @@ public interface PaymentGateway {
 
     GatewayPayment refund(String paymentId, String idempotencyKey);
 
+    /** A partial (or full) refund as the provider recorded it. */
+    record GatewayRefund(String id, BigDecimal amount, String status) {
+    }
+
+    /** Refunds part of an approved payment (returns of some items); the same key never refunds twice. */
+    GatewayRefund refundAmount(String paymentId, BigDecimal amount, String idempotencyKey);
+
     /** Public key the frontend needs for card tokenization (never the access token). */
     String publicKey();
 }
