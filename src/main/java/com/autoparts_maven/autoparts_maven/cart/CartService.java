@@ -70,8 +70,8 @@ public class CartService {
         Product product = productRepository.findById(productId)
                 .filter(CartService::isSellable)
                 .orElseThrow(() -> new ProductNotFoundException(productId));
-        if (product.getStockQuantity() < quantity) {
-            throw new InsufficientStockException(product.getSku(), product.getStockQuantity());
+        if (product.getAvailableQuantity() < quantity) {
+            throw new InsufficientStockException(product.getSku(), product.getAvailableQuantity());
         }
         CartItem item = cartItemRepository.findByUserIdAndProductId(userId, productId).orElseGet(() -> {
             if (cartItemRepository.countByUserId(userId) >= MAX_LINES) {
@@ -108,7 +108,7 @@ public class CartService {
     }
 
     static boolean isAvailable(Product product, int quantity) {
-        return isSellable(product) && product.getStockQuantity() >= quantity;
+        return isSellable(product) && product.getAvailableQuantity() >= quantity;
     }
 
     /** Active and priced: a product saved with price 0.00 (not priced yet) is never sold. */

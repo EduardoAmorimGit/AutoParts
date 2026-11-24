@@ -52,8 +52,13 @@ public class Product {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
 
+    /** Physical count on the shelf, as entered by the admins (form or spreadsheet). */
     @Column(name = "stock_quantity", nullable = false)
     private Integer stockQuantity;
+
+    /** Units held by open orders (awaiting payment, paid, preparing); maintained by the order module. */
+    @Column(name = "reserved_quantity", nullable = false)
+    private Integer reservedQuantity = 0;
 
     @Column(nullable = false)
     private Boolean active;
@@ -96,4 +101,14 @@ public class Product {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /**
+     * Units that can still be sold: the physical count minus open orders, never below zero (a
+     * recount lower than what is already reserved leaves nothing for sale).
+     */
+    public int getAvailableQuantity() {
+        int stock = stockQuantity == null ? 0 : stockQuantity;
+        int reserved = reservedQuantity == null ? 0 : reservedQuantity;
+        return Math.max(0, stock - reserved);
+    }
 }

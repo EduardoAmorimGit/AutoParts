@@ -55,7 +55,8 @@ public class OrderService {
      * Turns the cart into an order awaiting payment.
      *
      * <p>Products are locked (in id order, so concurrent checkouts cannot deadlock), checked for
-     * availability and their stock is decremented, i.e. reserved until payment or expiry. Prices,
+     * availability and the quantities are added to their reserved units until the order ships
+     * (physical stock goes down) or is cancelled (the reservation is released). Prices,
      * names, the address and the delivery fee of its region are copied into the order. Repeating the call with the same
      * Idempotency-Key returns the order already created instead of creating a second one.
      */
@@ -99,10 +100,10 @@ public class OrderService {
             if (product == null || !CartService.isSellable(product)) {
                 throw new ProductUnavailableException(line.getProduct().getSku());
             }
-            if (product.getStockQuantity() < line.getQuantity()) {
-                throw new InsufficientStockException(product.getSku(), product.getStockQuantity());
+            if (product.getAvailableQuantity() < line.getQuantity()) {
+                throw new InsufficientStockException(product.getSku(), product.getAvailableQuantity());
             }
-            product.setStockQuantity(product.getStockQuantity() - line.getQuantity());
+            product.setReservedQuantity(product.getReservedQuantity() + line.getQuantity());
 
             OrderItem item = new OrderItem();
             item.setProductId(product.getId());
@@ -135,7 +136,7 @@ public class OrderService {
                 .orElseThrow(() -> new OrderNotFoundException(orderId)));
     }
 
-    /** The customer may cancel only while the order awaits payment; reserved stock is returned. */
+    /** The customer may cancel only while the order awaits payment; the reservation is released. */
     @Transactional
     public OrderResponse cancelMine(Long userId, Long orderId, String reason) {
         orderRepository.findByIdAndUserId(orderId, userId).orElseThrow(() -> new OrderNotFoundException(orderId));
@@ -188,6 +189,25 @@ public class OrderService {
         return true;
     }
 
+    /**
+     * Hands a prepared order to the courier: the units leave the shelf, so the physical stock and
+     * the reservation both go down. The admin endpoint arrives with the operations panel.
+     */
+    @Transactional
+    public OrderResponse markShipped(Long orderId) {
+        Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+        order.moveTo(OrderStatus.SHIPPED);
+        Map<Long, Product> locked = lockProductsOf(order);
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProductId() == null ? null : locked.get(item.getProductId());
+            if (product != null) {
+                product.setStockQuantity(Math.max(0, product.getStockQuantity() - item.getQuantity()));
+                product.setReservedQuantity(Math.max(0, product.getReservedQuantity() - item.getQuantity()));
+            }
+        }
+        return OrderResponse.from(order);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<OrderSummary> search(OrderStatus status, Pageable pageable) {
         return PageResponse.from(orderRepository.search(status, pageable).map(OrderSummary::from));
@@ -199,7 +219,7 @@ public class OrderService {
     }
 
     /**
-     * Cancels orders whose payment deadline passed and returns their stock. Each order is locked
+     * Cancels orders whose payment deadline passed and releases their reservation. Each order is locked
      * and re-checked, so an order paid at the last moment is never cancelled.
      */
     @Transactional
@@ -223,23 +243,28 @@ public class OrderService {
         order.moveTo(OrderStatus.CANCELLED);
         order.setCancelledAt(Instant.now());
         order.setCancelReason(reason.length() > 200 ? reason.substring(0, 200) : reason);
-        returnStock(order);
+        releaseReservation(order);
     }
 
-    private void returnStock(Order order) {
-        List<Long> productIds = order.getItems().stream().map(OrderItem::getProductId)
-                .filter(Objects::nonNull).distinct().sorted().toList();
-        if (productIds.isEmpty()) {
-            return;
-        }
-        Map<Long, Product> locked = productRepository.findAllForUpdate(productIds).stream()
-                .collect(Collectors.toMap(Product::getId, Function.identity()));
+    private void releaseReservation(Order order) {
+        Map<Long, Product> locked = lockProductsOf(order);
         for (OrderItem item : order.getItems()) {
             Product product = item.getProductId() == null ? null : locked.get(item.getProductId());
             if (product != null) {
-                product.setStockQuantity(product.getStockQuantity() + item.getQuantity());
+                product.setReservedQuantity(Math.max(0, product.getReservedQuantity() - item.getQuantity()));
             }
         }
+    }
+
+    // Products of the order that still exist, locked in id order (same order as checkout: no deadlocks).
+    private Map<Long, Product> lockProductsOf(Order order) {
+        List<Long> productIds = order.getItems().stream().map(OrderItem::getProductId)
+                .filter(Objects::nonNull).distinct().sorted().toList();
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        return productRepository.findAllForUpdate(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
     }
 
     private static void copyAddress(Address address, Order order) {

@@ -73,6 +73,9 @@ class CheckoutFlowTest {
     @Autowired
     private OrderService orderService;
 
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
     private RequestPostProcessor ana;
     private RequestPostProcessor bob;
     private ProductResponse filter;
@@ -182,7 +185,7 @@ class CheckoutFlowTest {
 
         mockMvc.perform(get("/api/cart").with(ana)).andExpect(jsonPath("$.readyForCheckout").value(false));
         checkout(ana, addressId, "key-" + UUID.randomUUID()).andExpect(status().isConflict());
-        assertThat(stockOf(filter.id())).isEqualTo(5);
+        assertThat(availableOf(filter.id())).isEqualTo(5);
     }
 
     @Test
@@ -203,8 +206,8 @@ class CheckoutFlowTest {
                 .andReturn().getResponse().getContentAsString();
         Number orderId = JsonPath.read(body, "$.id");
 
-        assertThat(stockOf(filter.id())).isEqualTo(3);
-        assertThat(stockOf(oil.id())).isEqualTo(6);
+        assertThat(availableOf(filter.id())).isEqualTo(3);
+        assertThat(availableOf(oil.id())).isEqualTo(6);
         mockMvc.perform(get("/api/cart").with(ana)).andExpect(jsonPath("$.itemCount").value(0));
 
         productService.update(filter.id(), new ProductRequest(filter.sku(), "Filtro novo nome", null, null,
@@ -227,7 +230,7 @@ class CheckoutFlowTest {
                 .andReturn().getResponse().getContentAsString(), "$.id");
 
         assertThat(second).isEqualTo(first);
-        assertThat(stockOf(filter.id())).isEqualTo(4);
+        assertThat(availableOf(filter.id())).isEqualTo(4);
         mockMvc.perform(post("/api/checkout").with(ana).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"addressId\":" + addressId + "}"))
                 .andExpect(status().isBadRequest());
@@ -271,19 +274,19 @@ class CheckoutFlowTest {
         checkout(ana, bangu.longValue(), "key-" + UUID.randomUUID())
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.district").value("Bangu"));
-        assertThat(stockOf(filter.id())).isEqualTo(5);
+        assertThat(availableOf(filter.id())).isEqualTo(5);
     }
 
     @Test
     void customerCancelsAwaitingOrderAndStockReturns() throws Exception {
         Number orderId = placeOrder(ana, filter.id(), 2);
-        assertThat(stockOf(filter.id())).isEqualTo(3);
+        assertThat(availableOf(filter.id())).isEqualTo(3);
 
         mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.cancelReason").value("Cancelado pelo cliente"));
-        assertThat(stockOf(filter.id())).isEqualTo(5);
+        assertThat(availableOf(filter.id())).isEqualTo(5);
 
         mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(ana)).andExpect(status().isConflict());
     }
@@ -291,7 +294,7 @@ class CheckoutFlowTest {
     @Test
     void unpaidOrdersExpireAndReturnStock() throws Exception {
         Number orderId = placeOrder(ana, oil.id(), 3);
-        assertThat(stockOf(oil.id())).isEqualTo(7);
+        assertThat(availableOf(oil.id())).isEqualTo(7);
 
         assertThat(orderService.expireOverdue(Instant.now().plus(Duration.ofMinutes(5)), 100)).isZero();
         int expired = orderService.expireOverdue(Instant.now().plus(Duration.ofMinutes(31)), 100);
@@ -300,7 +303,39 @@ class CheckoutFlowTest {
         mockMvc.perform(get("/api/orders/{id}", orderId).with(ana))
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.cancelReason").value(OrderService.EXPIRED_REASON));
-        assertThat(stockOf(oil.id())).isEqualTo(10);
+        assertThat(availableOf(oil.id())).isEqualTo(10);
+    }
+
+    @Test
+    void adminStockIsThePhysicalCountAndOpenOrdersStayReserved() throws Exception {
+        Number orderId = placeOrder(ana, filter.id(), 2);
+        assertThat(physicalOf(filter.id())).isEqualTo(5);
+        assertThat(availableOf(filter.id())).isEqualTo(3);
+
+        // Editing the product with the same shelf count must not free the 2 units already sold.
+        productService.update(filter.id(), new ProductRequest(filter.sku(), "Filtro", null, null,
+                new BigDecimal("30.00"), 5, true));
+        assertThat(availableOf(filter.id())).isEqualTo(3);
+        mockMvc.perform(get("/api/products/{id}", filter.id()))
+                .andExpect(jsonPath("$.stockQuantity").value(5))
+                .andExpect(jsonPath("$.availableQuantity").value(3));
+
+        // A recount below what is reserved leaves nothing for sale (never negative).
+        productService.update(filter.id(), new ProductRequest(filter.sku(), "Filtro", null, null,
+                new BigDecimal("30.00"), 1, true));
+        assertThat(availableOf(filter.id())).isZero();
+        setQuantity(bob, filter.id(), 1).andExpect(status().isConflict());
+
+        productService.update(filter.id(), new ProductRequest(filter.sku(), "Filtro", null, null,
+                new BigDecimal("30.00"), 5, true));
+        orderService.markPaid(orderId.longValue());
+        productRepository.flush();
+        jdbcTemplate.update("UPDATE orders SET status = 'PREPARING' WHERE id = ?", orderId.longValue());
+        entityManager.clear();
+        orderService.markShipped(orderId.longValue());
+
+        assertThat(physicalOf(filter.id())).isEqualTo(3);
+        assertThat(availableOf(filter.id())).isEqualTo(3);
     }
 
     @Test
@@ -356,7 +391,12 @@ class CheckoutFlowTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"addressId\":" + addressId + "}"));
     }
 
-    private int stockOf(Long productId) {
+    private int availableOf(Long productId) {
+        productRepository.flush();
+        return productRepository.findById(productId).orElseThrow().getAvailableQuantity();
+    }
+
+    private int physicalOf(Long productId) {
         productRepository.flush();
         return productRepository.findById(productId).orElseThrow().getStockQuantity();
     }

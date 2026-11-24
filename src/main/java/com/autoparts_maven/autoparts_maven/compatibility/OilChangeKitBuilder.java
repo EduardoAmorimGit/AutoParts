@@ -30,13 +30,13 @@ final class OilChangeKitBuilder {
             return Optional.empty();
         }
         Optional<Product> filter = fittedProducts.stream()
-                .filter(p -> p.getType() == ProductType.OIL_FILTER && p.getStockQuantity() > 0)
+                .filter(p -> p.getType() == ProductType.OIL_FILTER && p.getAvailableQuantity() > 0)
                 .min(Comparator.comparing(Product::getPrice));
         Optional<OilChoice> oil = fittedProducts.stream()
                 .filter(p -> p.getType() == ProductType.ENGINE_OIL && p.getPackageVolumeLiters() != null
                         && p.getPackageVolumeLiters().signum() > 0)
                 .map(p -> new OilChoice(p, unitsFor(capacity, p.getPackageVolumeLiters())))
-                .filter(choice -> choice.product().getStockQuantity() >= choice.units())
+                .filter(choice -> choice.product().getAvailableQuantity() >= choice.units())
                 .min(Comparator.comparing(OilChoice::total));
         if (filter.isEmpty() || oil.isEmpty()) {
             return Optional.empty();
