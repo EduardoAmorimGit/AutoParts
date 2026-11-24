@@ -185,7 +185,11 @@ public class PaymentService {
      * arrives for a cancelled or already paid order is refunded and flagged for the admins.
      */
     Payment applyProviderState(Long paymentId, GatewayPayment result) {
-        Payment payment = paymentRepository.findById(paymentId).orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        // Locked (payment first, then order) so a webhook and a sync for the same payment are applied
+        // one after the other: the second one sees the approval already recorded instead of treating
+        // it as a late duplicate and refunding a legitimate payment.
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
         PayableOrder order = orderService.lockForPayment(payment.getOrderId());
         PaymentStatus previous = payment.getStatus();
         PaymentStatus status = PaymentStatus.fromMercadoPago(result.status());
@@ -214,6 +218,12 @@ public class PaymentService {
             payment.flag("Chargeback opened by the cardholder");
         } else if (status == PaymentStatus.REFUNDED && payment.getRefundedAt() == null) {
             payment.setRefundedAt(Instant.now());
+            // Refunded outside our automatic flow (e.g. in the Mercado Pago panel): the order is
+            // still PAID and would be shipped without money, so the admins must review it.
+            if (previous == PaymentStatus.APPROVED && order.status() != OrderStatus.CANCELLED) {
+                payment.flag("Refunded at the provider while the order is " + order.status()
+                        + "; review the order before shipping");
+            }
         }
         return paymentRepository.saveAndFlush(payment);
     }
