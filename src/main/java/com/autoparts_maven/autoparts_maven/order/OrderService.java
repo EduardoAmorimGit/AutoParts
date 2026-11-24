@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -40,10 +41,12 @@ public class OrderService {
     private final AddressService addressService;
     private final ProductRepository productRepository;
     private final Duration paymentTimeout;
+    private final ApplicationEventPublisher events;
 
     public OrderService(OrderRepository orderRepository, CartService cartService, AddressService addressService,
             ProductRepository productRepository,
-            @Value("${orders.payment-timeout:30m}") Duration paymentTimeout) {
+            @Value("${orders.payment-timeout:30m}") Duration paymentTimeout, ApplicationEventPublisher events) {
+        this.events = events;
         this.orderRepository = orderRepository;
         this.cartService = cartService;
         this.addressService = addressService;
@@ -122,6 +125,7 @@ public class OrderService {
 
         Order saved = orderRepository.saveAndFlush(order);
         cartService.clear(userId);
+        events.publishEvent(new OrderEvent(OrderEvent.Type.PLACED, saved.getId()));
         return OrderResponse.from(saved);
     }
 
@@ -187,6 +191,7 @@ public class OrderService {
         }
         order.moveTo(OrderStatus.PAID);
         order.setPaidAt(Instant.now());
+        events.publishEvent(new OrderEvent(OrderEvent.Type.PAID, order.getId()));
         return true;
     }
 
@@ -208,6 +213,7 @@ public class OrderService {
         order.moveTo(OrderStatus.SHIPPED);
         order.setShippedAt(Instant.now());
         order.setTrackingUrl(trackingUrl.trim());
+        events.publishEvent(new OrderEvent(OrderEvent.Type.SHIPPED, order.getId()));
         Map<Long, Product> locked = lockProductsOf(order);
         for (OrderItem item : order.getItems()) {
             Product product = item.getProductId() == null ? null : locked.get(item.getProductId());
@@ -224,6 +230,7 @@ public class OrderService {
         Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
         order.moveTo(OrderStatus.DELIVERED);
         order.setDeliveredAt(Instant.now());
+        events.publishEvent(new OrderEvent(OrderEvent.Type.DELIVERED, order.getId()));
         return OrderResponse.from(order);
     }
 
@@ -274,6 +281,7 @@ public class OrderService {
         order.setCancelledAt(Instant.now());
         order.setCancelReason(reason.length() > 200 ? reason.substring(0, 200) : reason);
         releaseReservation(order);
+        events.publishEvent(new OrderEvent(OrderEvent.Type.CANCELLED, order.getId()));
     }
 
     private void releaseReservation(Order order) {

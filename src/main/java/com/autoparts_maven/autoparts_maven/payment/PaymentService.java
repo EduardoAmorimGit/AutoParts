@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,10 +54,12 @@ public class PaymentService {
     private final AuthService authService;
     private final TransactionTemplate transactions;
     private final int maxInstallments;
+    private final ApplicationEventPublisher events;
 
     public PaymentService(Optional<PaymentGateway> gateway, PaymentRepository paymentRepository,
             OrderService orderService, AuthService authService, TransactionTemplate transactions,
-            @Value("${payments.max-installments:1}") int maxInstallments) {
+            @Value("${payments.max-installments:1}") int maxInstallments, ApplicationEventPublisher events) {
+        this.events = events;
         this.gateway = gateway;
         this.paymentRepository = paymentRepository;
         this.orderService = orderService;
@@ -266,6 +269,7 @@ public class PaymentService {
             payment.flag("Chargeback opened by the cardholder");
         } else if (status == PaymentStatus.REFUNDED && payment.getRefundedAt() == null) {
             payment.setRefundedAt(Instant.now());
+            publishRefund(payment);
             // Refunded outside our automatic flow (e.g. in the Mercado Pago panel): the order is
             // still PAID and would be shipped without money, so the admins must review it.
             if (previous == PaymentStatus.APPROVED && order.status() != OrderStatus.CANCELLED) {
@@ -287,10 +291,16 @@ public class PaymentService {
             payment.setProviderStatus(refunded.status());
             payment.setRefundedAt(Instant.now());
             payment.flag(reason + "; refunded automatically");
+            publishRefund(payment);
         } catch (PaymentGatewayException exception) {
             payment.flag(reason + "; AUTOMATIC REFUND FAILED - refund manually");
         }
         log.warn("Payment {} for order {}: {}", payment.getId(), order.id(), reason);
+    }
+
+    private void publishRefund(Payment payment) {
+        events.publishEvent(new PaymentRefundedEvent(payment.getOrderId(), payment.getId(), payment.getAmount(),
+                payment.getMethod().name()));
     }
 
     private Payment newAttempt(PayableOrder order, Payment.Method method, Instant expiresAt) {
