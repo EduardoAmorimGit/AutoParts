@@ -273,8 +273,12 @@ public class ReturnService {
     }
 
     private ReturnResponse view(ReturnRequest request) {
-        boolean overdue = request.getStatus() == ReturnStatus.REQUESTED
-                && request.getRequestedAt().plus(answerDeadline).isBefore(Instant.now());
+        // The policy promises an answer, and the refund once the items are back, within the deadline.
+        Instant now = Instant.now();
+        boolean overdue = (request.getStatus() == ReturnStatus.REQUESTED
+                        && request.getRequestedAt().plus(answerDeadline).isBefore(now))
+                || (request.getStatus() == ReturnStatus.RECEIVED
+                        && request.getReceivedAt().plus(answerDeadline).isBefore(now));
         Instant legalDeadline = request.getType() == ReturnType.DEFECT && request.getStatus().isOpen()
                 ? request.getRequestedAt().plus(Duration.ofDays(30)) : null;
         return ReturnResponse.from(request, overdue, legalDeadline);

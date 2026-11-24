@@ -42,18 +42,18 @@ public final class ReturnDtos {
             List<ReturnItemResponse> items, BigDecimal itemsAmount, BigDecimal deliveryFeeAmount,
             BigDecimal refundAmount, String adminNote, String rejectionReason, boolean restocked,
             Instant requestedAt, Instant approvedAt, Instant receivedAt, Instant resolvedAt,
-            /** Admin view: still waiting for a first answer after the answer deadline. */
-            boolean answerOverdue,
+            /** Admin view: past the policy deadline to answer (REQUESTED) or to refund/replace (RECEIVED). */
+            boolean overdue,
             /** Defects: CDC art. 18 gives the store 30 days to solve them before the customer may demand a refund. */
             Instant legalDeadline) {
 
-        public static ReturnResponse from(ReturnRequest r, boolean answerOverdue, Instant legalDeadline) {
+        public static ReturnResponse from(ReturnRequest r, boolean overdue, Instant legalDeadline) {
             return new ReturnResponse(r.getId(), r.getOrderId(), r.getType().name(), r.getStatus().name(),
                     r.getCustomerReason(),
                     r.getItems().stream().map(i -> new ReturnItemResponse(i.getOrderItemId(), i.getQuantity())).toList(),
                     r.getItemsAmount(), r.getDeliveryFeeAmount(), r.getRefundAmount(), r.getAdminNote(),
                     r.getRejectionReason(), r.isRestocked(), r.getRequestedAt(), r.getApprovedAt(),
-                    r.getReceivedAt(), r.getResolvedAt(), answerOverdue, legalDeadline);
+                    r.getReceivedAt(), r.getResolvedAt(), overdue, legalDeadline);
         }
     }
 }
