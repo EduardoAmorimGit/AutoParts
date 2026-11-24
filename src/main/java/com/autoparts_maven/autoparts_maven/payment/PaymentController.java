@@ -1,6 +1,7 @@
 package com.autoparts_maven.autoparts_maven.payment;
 
 import com.autoparts_maven.autoparts_maven.common.PageResponse;
+import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.AdminCancelRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.CardPaymentRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PaymentResponse;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PixPaymentRequest;
@@ -88,6 +89,13 @@ public class PaymentController {
             paymentService.handleNotification(dataId);
         }
         return ResponseEntity.ok().build();
+    }
+
+    /** Admin cancellation of an order not shipped yet; approved payments are refunded automatically. */
+    @PostMapping("/api/admin/orders/{orderId}/cancel")
+    public PaymentService.AdminCancellation cancelOrder(@PathVariable Long orderId,
+            @Valid @RequestBody AdminCancelRequest request) {
+        return paymentService.cancelOrderByAdmin(orderId, request.reason());
     }
 
     @GetMapping("/api/admin/payments/attention")
