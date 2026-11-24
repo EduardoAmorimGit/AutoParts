@@ -2,6 +2,7 @@ package com.autoparts_maven.autoparts_maven.payment;
 
 import static com.autoparts_maven.autoparts_maven.support.TestAuth.admin;
 import static com.autoparts_maven.autoparts_maven.support.TestAuth.customer;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -30,6 +31,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -211,6 +213,109 @@ class PaymentFlowTest {
         mockMvc.perform(get("/api/admin/payments/attention").with(admin()))
                 .andExpect(jsonPath("$.content[?(@.id == " + paymentId + ")].attentionReason").value(
                         "Refunded at the provider while the order is PAID; review the order before shipping"));
+    }
+
+    @Test
+    void adminCancellingAPaidOrderRefundsItsPayment() throws Exception {
+        gateway.nextStatus = "approved";
+        String paymentId = JsonPath.read(card(ana).andReturn().getResponse().getContentAsString(), "$.id").toString();
+        String mpId = providerIdOf(paymentId);
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Sem estoque\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.order.cancelReason").value("Sem estoque"))
+                .andExpect(jsonPath("$.payments[0].status").value("REFUNDED"))
+                .andExpect(jsonPath("$.payments[0].needsAttention").value(false));
+        assertThat(gateway.refunded).containsExactly(mpId);
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"de novo\"}"))
+                .andExpect(status().isConflict());
+        assertThat(gateway.refunded).hasSize(1);
+    }
+
+    @Test
+    void failedRefundOnAdminCancelIsFlaggedAndShippedOrdersCannotBeCancelled() throws Exception {
+        gateway.nextStatus = "approved";
+        card(ana).andExpect(jsonPath("$.status").value("APPROVED"));
+        gateway.failRefunds = true;
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Cliente desistiu\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.payments[0].status").value("APPROVED"))
+                .andExpect(jsonPath("$.payments[0].attentionReason").value(
+                        "Order cancelled by an admin; AUTOMATIC REFUND FAILED - refund manually"));
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(ana)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminFulfillsAPaidOrderWithATrackingLink() throws Exception {
+        gateway.nextStatus = "approved";
+        card(ana).andExpect(jsonPath("$.status").value("APPROVED"));
+
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"https://share.lalamove.com/x\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/orders/{id}/prepare", orderId).with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PREPARING"));
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"http://insecure.test\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"https://share.lalamove.com/x\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SHIPPED"))
+                .andExpect(jsonPath("$.shippedAt").isNotEmpty());
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"tarde\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/orders/{id}/deliver", orderId).with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deliveredAt").isNotEmpty());
+
+        mockMvc.perform(get("/api/orders/{id}", orderId).with(ana))
+                .andExpect(jsonPath("$.status").value("DELIVERED"))
+                .andExpect(jsonPath("$.paidAt").isNotEmpty())
+                .andExpect(jsonPath("$.trackingUrl").value("https://share.lalamove.com/x"));
+    }
+
+    @Test
+    void adminResolvesAFlaggedPaymentWithANote() throws Exception {
+        gateway.amountOverride = new BigDecimal("1.00");
+        gateway.nextStatus = "approved";
+        String paymentId = JsonPath.read(card(ana).andExpect(jsonPath("$.needsAttention").value(true))
+                .andReturn().getResponse().getContentAsString(), "$.id").toString();
+        Long adminId = authService.register(new RegisterRequest(
+                "pay-admin-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com", "Str0ng-pass", "Admin")).id();
+        RequestPostProcessor realAdmin = jwt().jwt(token -> token.subject(String.valueOf(adminId)))
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(realAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(realAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"Estornado pelo painel do MP\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.needsAttention").value(false))
+                .andExpect(jsonPath("$.resolvedBy").value(adminId))
+                .andExpect(jsonPath("$.resolutionNote").value("Estornado pelo painel do MP"));
+        mockMvc.perform(get("/api/admin/payments/attention").with(admin()))
+                .andExpect(jsonPath("$.content[?(@.id == " + paymentId + ")]").isEmpty());
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(realAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"de novo\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/payments/{id}/resolve", paymentId).with(ana)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"x\"}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

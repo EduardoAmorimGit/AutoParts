@@ -32,6 +32,7 @@ public class FakePaymentGateway implements PaymentGateway {
     String nextStatusDetail = "pending_waiting_transfer";
     BigDecimal amountOverride;
     Challenge nextChallenge;
+    boolean failRefunds;
 
     void reset() {
         payments.clear();
@@ -41,6 +42,7 @@ public class FakePaymentGateway implements PaymentGateway {
         nextStatusDetail = "pending_waiting_transfer";
         amountOverride = null;
         nextChallenge = null;
+        failRefunds = false;
     }
 
     @Override
@@ -68,6 +70,10 @@ public class FakePaymentGateway implements PaymentGateway {
 
     @Override
     public GatewayPayment refund(String paymentId, String idempotencyKey) {
+        if (failRefunds) {
+            throw new com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGatewayException(
+                    "refund failed", true, null);
+        }
         refunded.add(paymentId);
         return change(paymentId, "refunded", "refunded");
     }

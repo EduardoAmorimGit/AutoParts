@@ -100,6 +100,19 @@ public class Order {
     @Column(name = "cancel_reason", length = 200)
     private String cancelReason;
 
+    @Column(name = "paid_at")
+    private Instant paidAt;
+
+    @Column(name = "shipped_at")
+    private Instant shippedAt;
+
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
+    /** Courier tracking link pasted by an admin when the order ships. */
+    @Column(name = "tracking_url", length = 500)
+    private String trackingUrl;
+
     @Version
     @Column(nullable = false)
     private Long version;

@@ -38,6 +38,12 @@ class InvalidPaymentRequestException extends RuntimeException {
     }
 }
 
+class PaymentNotFlaggedException extends RuntimeException {
+    PaymentNotFlaggedException(Long id) {
+        super("Payment " + id + " does not need attention");
+    }
+}
+
 class InvalidWebhookSignatureException extends RuntimeException {
     InvalidWebhookSignatureException() {
         super("Invalid notification signature");
@@ -53,7 +59,7 @@ class PaymentExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "Payment not found", exception.getMessage());
     }
 
-    @ExceptionHandler({OrderNotPayableException.class, PaymentInProgressException.class})
+    @ExceptionHandler({OrderNotPayableException.class, PaymentInProgressException.class, PaymentNotFlaggedException.class})
     ProblemDetail handleConflict(RuntimeException exception) {
         return problem(HttpStatus.CONFLICT, "Conflict", exception.getMessage());
     }

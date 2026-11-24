@@ -5,6 +5,7 @@ import com.autoparts_maven.autoparts_maven.identity.AuthService;
 import com.autoparts_maven.autoparts_maven.order.OrderService;
 import com.autoparts_maven.autoparts_maven.order.OrderService.PayableOrder;
 import com.autoparts_maven.autoparts_maven.order.OrderStatus;
+import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderResponse;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.CardPaymentRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PaymentResponse;
 import com.autoparts_maven.autoparts_maven.payment.gateway.PaymentGateway;
@@ -171,6 +172,53 @@ public class PaymentService {
             return;
         }
         transactions.executeWithoutResult(status -> applyProviderState(localId, result));
+    }
+
+    /** Result of an admin cancellation: the cancelled order and the state of its payments after refunds. */
+    public record AdminCancellation(OrderResponse order, List<PaymentResponse> payments) {
+    }
+
+    /**
+     * An admin cancels an order that has not shipped. The order is cancelled first (its own
+     * transaction, reservation released), then every approved payment is refunded at the provider,
+     * outside any transaction. A refund that fails is flagged so the admins refund it by hand; a
+     * payment approved after this point is refunded by the late-payment rule.
+     */
+    public AdminCancellation cancelOrderByAdmin(Long orderId, String reason) {
+        OrderResponse order = orderService.cancelByAdmin(orderId, reason);
+        for (Payment payment : paymentRepository.findByOrderIdOrderByIdAsc(orderId)) {
+            if (payment.getStatus() == PaymentStatus.APPROVED && payment.getProviderPaymentId() != null) {
+                refundForCancelledOrder(payment.getId(), payment.getProviderPaymentId());
+            }
+        }
+        List<PaymentResponse> payments = paymentRepository.findByOrderIdOrderByIdAsc(orderId).stream()
+                .map(payment -> PaymentResponse.from(payment, null)).toList();
+        return new AdminCancellation(order, payments);
+    }
+
+    private void refundForCancelledOrder(Long paymentId, String providerPaymentId) {
+        GatewayPayment refunded;
+        try {
+            refunded = gateway().refund(providerPaymentId, UUID.randomUUID().toString());
+        } catch (PaymentGatewayException | PaymentsDisabledException exception) {
+            log.warn("Refund of payment {} for a cancelled order failed", paymentId);
+            transactions.executeWithoutResult(status -> paymentRepository.findByIdForUpdate(paymentId)
+                    .ifPresent(payment -> payment.flag("Order cancelled by an admin; AUTOMATIC REFUND FAILED - refund manually")));
+            return;
+        }
+        transactions.executeWithoutResult(status -> applyProviderState(paymentId, refunded));
+    }
+
+    /** An admin closes a flagged payment after handling it (refund done by hand, chargeback answered...). */
+    @Transactional
+    public PaymentResponse resolveAttention(Long paymentId, Long adminId, String note) {
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        if (!payment.isNeedsAttention()) {
+            throw new PaymentNotFlaggedException(paymentId);
+        }
+        payment.resolve(adminId, note.trim(), Instant.now());
+        return PaymentResponse.from(payment, null);
     }
 
     @Transactional(readOnly = true)

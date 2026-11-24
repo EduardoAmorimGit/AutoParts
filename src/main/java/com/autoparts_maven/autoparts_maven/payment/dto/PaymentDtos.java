@@ -30,6 +30,9 @@ public final class PaymentDtos {
             @NotBlank @Pattern(regexp = "^[\\d./-]{11,18}$") String identificationNumber) {
     }
 
+    public record ResolveAttentionRequest(@NotBlank @Size(max = 500) String note) {
+    }
+
     public record PixData(String qrCode, String qrCodeBase64, String ticketUrl, Instant expiresAt) {
     }
 
@@ -38,7 +41,7 @@ public final class PaymentDtos {
 
     public record PaymentResponse(Long id, Long orderId, String method, String status, String statusDetail,
             BigDecimal amount, PixData pix, ChallengeData challenge, Instant approvedAt, boolean needsAttention,
-            String attentionReason, Instant createdAt) {
+            String attentionReason, Instant resolvedAt, Long resolvedBy, String resolutionNote, Instant createdAt) {
 
         public static PaymentResponse from(Payment payment, Challenge challenge) {
             PixData pix = payment.getPixQrCode() == null ? null : new PixData(payment.getPixQrCode(),
@@ -47,6 +50,7 @@ public final class PaymentDtos {
                     payment.getStatus().name(), payment.getProviderStatusDetail(), payment.getAmount(), pix,
                     challenge == null ? null : new ChallengeData(challenge.url(), challenge.creq()),
                     payment.getApprovedAt(), payment.isNeedsAttention(), payment.getAttentionReason(),
+                    payment.getResolvedAt(), payment.getResolvedBy(), payment.getResolutionNote(),
                     payment.getCreatedAt());
         }
     }

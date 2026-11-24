@@ -94,6 +94,16 @@ public class Payment {
     @Column(name = "attention_reason", length = 200)
     private String attentionReason;
 
+    /** When, by whom and how an admin closed the last flag (the reason stays for the record). */
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
+    @Column(name = "resolved_by")
+    private Long resolvedBy;
+
+    @Column(name = "resolution_note", length = 500)
+    private String resolutionNote;
+
     @Version
     @Column(nullable = false)
     private Long version;
@@ -106,8 +116,18 @@ public class Payment {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    void resolve(Long adminId, String note, Instant at) {
+        needsAttention = false;
+        resolvedBy = adminId;
+        resolutionNote = note;
+        resolvedAt = at;
+    }
+
     void flag(String reason) {
         needsAttention = true;
+        resolvedAt = null;
+        resolvedBy = null;
+        resolutionNote = null;
         attentionReason = reason.length() > 200 ? reason.substring(0, 200) : reason;
     }
 }
