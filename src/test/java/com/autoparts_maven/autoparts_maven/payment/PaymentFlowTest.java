@@ -214,6 +214,79 @@ class PaymentFlowTest {
     }
 
     @Test
+    void adminCancellingAPaidOrderRefundsItsPayment() throws Exception {
+        gateway.nextStatus = "approved";
+        String paymentId = JsonPath.read(card(ana).andReturn().getResponse().getContentAsString(), "$.id").toString();
+        String mpId = providerIdOf(paymentId);
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Sem estoque\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.order.cancelReason").value("Sem estoque"))
+                .andExpect(jsonPath("$.payments[0].status").value("REFUNDED"))
+                .andExpect(jsonPath("$.payments[0].needsAttention").value(false));
+        assertThat(gateway.refunded).containsExactly(mpId);
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"de novo\"}"))
+                .andExpect(status().isConflict());
+        assertThat(gateway.refunded).hasSize(1);
+    }
+
+    @Test
+    void failedRefundOnAdminCancelIsFlaggedAndShippedOrdersCannotBeCancelled() throws Exception {
+        gateway.nextStatus = "approved";
+        card(ana).andExpect(jsonPath("$.status").value("APPROVED"));
+        gateway.failRefunds = true;
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Cliente desistiu\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.payments[0].status").value("APPROVED"))
+                .andExpect(jsonPath("$.payments[0].attentionReason").value(
+                        "Order cancelled by an admin; AUTOMATIC REFUND FAILED - refund manually"));
+
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(ana)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminFulfillsAPaidOrderWithATrackingLink() throws Exception {
+        gateway.nextStatus = "approved";
+        card(ana).andExpect(jsonPath("$.status").value("APPROVED"));
+
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"https://share.lalamove.com/x\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/orders/{id}/prepare", orderId).with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PREPARING"));
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"http://insecure.test\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/admin/orders/{id}/ship", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"trackingUrl\":\"https://share.lalamove.com/x\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SHIPPED"))
+                .andExpect(jsonPath("$.shippedAt").isNotEmpty());
+        mockMvc.perform(post("/api/admin/orders/{id}/cancel", orderId).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"tarde\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/orders/{id}/deliver", orderId).with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deliveredAt").isNotEmpty());
+
+        mockMvc.perform(get("/api/orders/{id}", orderId).with(ana))
+                .andExpect(jsonPath("$.status").value("DELIVERED"))
+                .andExpect(jsonPath("$.paidAt").isNotEmpty())
+                .andExpect(jsonPath("$.trackingUrl").value("https://share.lalamove.com/x"));
+    }
+
+    @Test
     void approvalWithADifferentAmountDoesNotPayTheOrder() throws Exception {
         gateway.amountOverride = new BigDecimal("1.00");
         gateway.nextStatus = "approved";
