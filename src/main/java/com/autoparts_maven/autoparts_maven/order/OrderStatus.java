@@ -18,7 +18,8 @@ public enum OrderStatus {
             AWAITING_PAYMENT, EnumSet.of(PAID, CANCELLED),
             PAID, EnumSet.of(PREPARING, CANCELLED),
             PREPARING, EnumSet.of(SHIPPED, CANCELLED),
-            SHIPPED, EnumSet.of(DELIVERED),
+            // Cancelling a shipped order: delivery failed or refused; the units come back to the shelf.
+            SHIPPED, EnumSet.of(DELIVERED, CANCELLED),
             DELIVERED, EnumSet.noneOf(OrderStatus.class),
             CANCELLED, EnumSet.noneOf(OrderStatus.class));
 

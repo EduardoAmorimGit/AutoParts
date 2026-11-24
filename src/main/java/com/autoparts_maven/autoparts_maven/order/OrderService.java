@@ -140,12 +140,19 @@ public class OrderService {
                 .orElseThrow(() -> new OrderNotFoundException(orderId)));
     }
 
-    /** The customer may cancel only while the order awaits payment; the reservation is released. */
+    /** Statuses in which the customer may cancel on their own: anything before the order leaves the store. */
+    private static final java.util.Set<OrderStatus> CUSTOMER_CANCELLABLE =
+            java.util.EnumSet.of(OrderStatus.AWAITING_PAYMENT, OrderStatus.PAID, OrderStatus.PREPARING);
+
+    /**
+     * The customer may cancel until the order ships (right of withdrawal, CDC art. 49); the
+     * reservation is released. Refunding a payment already received is the payment module's job.
+     */
     @Transactional
     public OrderResponse cancelMine(Long userId, Long orderId, String reason) {
         orderRepository.findByIdAndUserId(orderId, userId).orElseThrow(() -> new OrderNotFoundException(orderId));
         Order order = orderRepository.findForUpdate(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
-        if (order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+        if (!CUSTOMER_CANCELLABLE.contains(order.getStatus())) {
             throw new InvalidOrderTransitionException(orderId, order.getStatus(), OrderStatus.CANCELLED);
         }
         cancel(order, reason == null || reason.isBlank() ? "Cancelado pelo cliente" : reason.trim());
@@ -235,7 +242,8 @@ public class OrderService {
     }
 
     /**
-     * An admin cancels an order that has not shipped yet; the reservation is released. Refunding
+     * An admin cancels an order before delivery: before shipping the reservation is released; a
+     * shipped order (delivery failed or refused) puts its units back on the shelf. Refunding
      * a payment already received is the caller's job (payment module), after this commits.
      */
     @Transactional
@@ -277,10 +285,15 @@ public class OrderService {
     }
 
     private void cancel(Order order, String reason) {
+        boolean shipped = order.getStatus() == OrderStatus.SHIPPED;
         order.moveTo(OrderStatus.CANCELLED);
         order.setCancelledAt(Instant.now());
         order.setCancelReason(reason.length() > 200 ? reason.substring(0, 200) : reason);
-        releaseReservation(order);
+        if (shipped) {
+            returnToShelf(order);
+        } else {
+            releaseReservation(order);
+        }
         events.publishEvent(new OrderEvent(OrderEvent.Type.CANCELLED, order.getId()));
     }
 
@@ -290,6 +303,17 @@ public class OrderService {
             Product product = item.getProductId() == null ? null : locked.get(item.getProductId());
             if (product != null) {
                 product.setReservedQuantity(Math.max(0, product.getReservedQuantity() - item.getQuantity()));
+            }
+        }
+    }
+
+    // A shipped order that comes back (delivery failed or refused): its units are on the shelf again.
+    private void returnToShelf(Order order) {
+        Map<Long, Product> locked = lockProductsOf(order);
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProductId() == null ? null : locked.get(item.getProductId());
+            if (product != null) {
+                product.setStockQuantity(product.getStockQuantity() + item.getQuantity());
             }
         }
     }
