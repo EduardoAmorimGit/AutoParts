@@ -185,7 +185,11 @@ public class PaymentService {
      * arrives for a cancelled or already paid order is refunded and flagged for the admins.
      */
     Payment applyProviderState(Long paymentId, GatewayPayment result) {
-        Payment payment = paymentRepository.findById(paymentId).orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        // Locked (payment first, then order) so a webhook and a sync for the same payment are applied
+        // one after the other: the second one sees the approval already recorded instead of treating
+        // it as a late duplicate and refunding a legitimate payment.
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
         PayableOrder order = orderService.lockForPayment(payment.getOrderId());
         PaymentStatus previous = payment.getStatus();
         PaymentStatus status = PaymentStatus.fromMercadoPago(result.status());
