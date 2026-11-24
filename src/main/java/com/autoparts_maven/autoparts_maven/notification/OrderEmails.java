@@ -3,6 +3,7 @@ package com.autoparts_maven.autoparts_maven.notification;
 import com.autoparts_maven.autoparts_maven.legal.StoreInfo;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderItemResponse;
 import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.OrderResponse;
+import com.autoparts_maven.autoparts_maven.returns.dto.ReturnDtos.ReturnResponse;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.Instant;
@@ -78,6 +79,67 @@ class OrderEmails {
         return new Content("Estorno confirmado - pedido #" + orderId, greeting(name)
                 + "Confirmamos o estorno de " + money(amount) + " referente ao pedido #" + orderId + ".\n"
                 + when + "\n" + footer());
+    }
+
+    Content returnRequested(String name, ReturnResponse request) {
+        String what = "WITHDRAWAL".equals(request.type())
+                ? "desistência da compra (direito de arrependimento)"
+                : "produto com defeito";
+        return new Content("Recebemos sua solicitação de devolução #" + request.id(), greeting(name)
+                + "Recebemos sua solicitação de devolução #" + request.id() + " do pedido #" + request.orderId()
+                + " (" + what + ") em " + DATE_TIME.format(request.requestedAt()) + ".
+
+"
+                + "Valor a ser reembolsado: " + money(request.refundAmount())
+                + (request.deliveryFeeAmount().signum() > 0 ? " (inclui o frete de " + money(request.deliveryFeeAmount()) + ")" : "")
+                + ".
+
+Nossa equipe vai responder em até 2 dias úteis com as instruções de coleta, que é feita "
+                + "sem custo para você. Guarde os produtos e, se possível, a embalagem.
+" + footer());
+    }
+
+    Content returnApproved(String name, ReturnResponse request) {
+        return new Content("Devolução #" + request.id() + " aprovada", greeting(name)
+                + "Sua devolução #" + request.id() + " foi aprovada. Entraremos em contato para combinar a coleta, "
+                + "sem custo para você."
+                + (request.adminNote() == null ? "" : "
+
+Observação da loja: " + request.adminNote())
+                + "
+
+O reembolso de " + money(request.refundAmount())
+                + " é feito pelo mesmo meio de pagamento usado na compra.
+" + footer());
+    }
+
+    Content returnReceived(String name, ReturnResponse request) {
+        return new Content("Recebemos os produtos da devolução #" + request.id(), greeting(name)
+                + "Os produtos da devolução #" + request.id() + " chegaram à nossa loja. Você receberá a "
+                + "confirmação do reembolso ou da troca em seguida.
+" + footer());
+    }
+
+    Content returnReplaced(String name, ReturnResponse request) {
+        return new Content("Troca da devolução #" + request.id() + " concluída", greeting(name)
+                + "O produto com defeito da devolução #" + request.id() + " foi substituído por uma unidade nova."
+                + (request.adminNote() == null ? "" : "
+
+Observação da loja: " + request.adminNote())
+                + "
+" + footer());
+    }
+
+    Content returnRejected(String name, ReturnResponse request) {
+        return new Content("Devolução #" + request.id() + " não aprovada", greeting(name)
+                + "Analisamos a devolução #" + request.id() + " do pedido #" + request.orderId()
+                + " e ela não foi aprovada.
+Motivo: " + request.rejectionReason() + "
+
+"
+                + "Se discordar ou tiver novas informações, responda a este e-mail ou fale com o nosso atendimento: "
+                + "vamos reavaliar.
+" + footer());
     }
 
     private String summary(OrderResponse order) {
