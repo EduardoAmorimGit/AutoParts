@@ -87,59 +87,41 @@ class OrderEmails {
                 : "produto com defeito";
         return new Content("Recebemos sua solicitação de devolução #" + request.id(), greeting(name)
                 + "Recebemos sua solicitação de devolução #" + request.id() + " do pedido #" + request.orderId()
-                + " (" + what + ") em " + DATE_TIME.format(request.requestedAt()) + ".
-
-"
+                + " (" + what + ") em " + DATE_TIME.format(request.requestedAt()) + ".\n\n"
                 + "Valor a ser reembolsado: " + money(request.refundAmount())
                 + (request.deliveryFeeAmount().signum() > 0 ? " (inclui o frete de " + money(request.deliveryFeeAmount()) + ")" : "")
-                + ".
-
-Nossa equipe vai responder em até 2 dias úteis com as instruções de coleta, que é feita "
-                + "sem custo para você. Guarde os produtos e, se possível, a embalagem.
-" + footer());
+                + ".\n\nNossa equipe vai responder em até 2 dias úteis com as instruções de coleta, que é feita "
+                + "sem custo para você. Guarde os produtos e, se possível, a embalagem.\n" + footer());
     }
 
     Content returnApproved(String name, ReturnResponse request) {
         return new Content("Devolução #" + request.id() + " aprovada", greeting(name)
                 + "Sua devolução #" + request.id() + " foi aprovada. Entraremos em contato para combinar a coleta, "
                 + "sem custo para você."
-                + (request.adminNote() == null ? "" : "
-
-Observação da loja: " + request.adminNote())
-                + "
-
-O reembolso de " + money(request.refundAmount())
-                + " é feito pelo mesmo meio de pagamento usado na compra.
-" + footer());
+                + (request.adminNote() == null ? "" : "\n\nObservação da loja: " + request.adminNote())
+                + "\n\nO reembolso de " + money(request.refundAmount())
+                + " é feito pelo mesmo meio de pagamento usado na compra.\n" + footer());
     }
 
     Content returnReceived(String name, ReturnResponse request) {
         return new Content("Recebemos os produtos da devolução #" + request.id(), greeting(name)
                 + "Os produtos da devolução #" + request.id() + " chegaram à nossa loja. Você receberá a "
-                + "confirmação do reembolso ou da troca em seguida.
-" + footer());
+                + "confirmação do reembolso ou da troca em seguida.\n" + footer());
     }
 
     Content returnReplaced(String name, ReturnResponse request) {
         return new Content("Troca da devolução #" + request.id() + " concluída", greeting(name)
                 + "O produto com defeito da devolução #" + request.id() + " foi substituído por uma unidade nova."
-                + (request.adminNote() == null ? "" : "
-
-Observação da loja: " + request.adminNote())
-                + "
-" + footer());
+                + (request.adminNote() == null ? "" : "\n\nObservação da loja: " + request.adminNote())
+                + "\n" + footer());
     }
 
     Content returnRejected(String name, ReturnResponse request) {
         return new Content("Devolução #" + request.id() + " não aprovada", greeting(name)
                 + "Analisamos a devolução #" + request.id() + " do pedido #" + request.orderId()
-                + " e ela não foi aprovada.
-Motivo: " + request.rejectionReason() + "
-
-"
+                + " e ela não foi aprovada.\nMotivo: " + request.rejectionReason() + "\n\n"
                 + "Se discordar ou tiver novas informações, responda a este e-mail ou fale com o nosso atendimento: "
-                + "vamos reavaliar.
-" + footer());
+                + "vamos reavaliar.\n" + footer());
     }
 
     private String summary(OrderResponse order) {
