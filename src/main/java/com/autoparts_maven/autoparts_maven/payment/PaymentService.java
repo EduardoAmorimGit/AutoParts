@@ -209,6 +209,18 @@ public class PaymentService {
         transactions.executeWithoutResult(status -> applyProviderState(paymentId, refunded));
     }
 
+    /** An admin closes a flagged payment after handling it (refund done by hand, chargeback answered...). */
+    @Transactional
+    public PaymentResponse resolveAttention(Long paymentId, Long adminId, String note) {
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        if (!payment.isNeedsAttention()) {
+            throw new PaymentNotFlaggedException(paymentId);
+        }
+        payment.resolve(adminId, note.trim(), Instant.now());
+        return PaymentResponse.from(payment, null);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<PaymentResponse> needingAttention(Pageable pageable) {
         return PageResponse.from(paymentRepository.findByNeedsAttentionTrue(pageable)

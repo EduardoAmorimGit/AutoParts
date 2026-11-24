@@ -5,6 +5,7 @@ import com.autoparts_maven.autoparts_maven.order.dto.OrderDtos.AdminCancelReques
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.CardPaymentRequest;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PaymentResponse;
 import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.PixPaymentRequest;
+import com.autoparts_maven.autoparts_maven.payment.dto.PaymentDtos.ResolveAttentionRequest;
 import com.autoparts_maven.autoparts_maven.payment.gateway.MercadoPagoProperties;
 import com.autoparts_maven.autoparts_maven.payment.gateway.WebhookSignatureVerifier;
 import jakarta.validation.Valid;
@@ -102,6 +103,12 @@ public class PaymentController {
     public PageResponse<PaymentResponse> needingAttention(
             @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return paymentService.needingAttention(pageable);
+    }
+
+    @PostMapping("/api/admin/payments/{paymentId}/resolve")
+    public PaymentResponse resolveAttention(@AuthenticationPrincipal Jwt jwt, @PathVariable Long paymentId,
+            @Valid @RequestBody ResolveAttentionRequest request) {
+        return paymentService.resolveAttention(paymentId, userId(jwt), request.note());
     }
 
     private static Long userId(Jwt jwt) {
