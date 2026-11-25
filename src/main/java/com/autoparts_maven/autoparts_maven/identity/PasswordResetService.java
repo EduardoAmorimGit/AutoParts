@@ -55,7 +55,7 @@ public class PasswordResetService {
                 || resetTokenRepository.existsByUserIdAndCreatedAtAfter(user.getId(), now.minus(cooldown))) {
             return;
         }
-        resetTokenRepository.invalidateOpenForUser(user.getId(), now);
+        invalidateOpenLinks(user.getId(), now);
 
         String token = tokenService.newRefreshToken();
         PasswordResetToken stored = new PasswordResetToken();
@@ -82,8 +82,13 @@ public class PasswordResetService {
 
     /** Shared by reset and change: closes open links and sessions and tells the customer. */
     void passwordChanged(Long userId, Instant now) {
-        resetTokenRepository.invalidateOpenForUser(userId, now);
+        invalidateOpenLinks(userId, now);
         refreshTokenRepository.revokeAllForUser(userId, now);
         events.publishEvent(new PasswordChanged(userId, now));
+    }
+
+    // Entity updates rather than a bulk query, so links already loaded in this transaction stay in sync.
+    private void invalidateOpenLinks(Long userId, Instant now) {
+        resetTokenRepository.findByUserIdAndUsedAtIsNull(userId).forEach(link -> link.setUsedAt(now));
     }
 }
