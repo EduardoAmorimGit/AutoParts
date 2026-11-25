@@ -35,6 +35,14 @@ public final class IdentityDtos {
             @NotBlank @Size(min = MIN_PASSWORD, max = MAX_PASSWORD) String newPassword) {
     }
 
+    public record ForgotPasswordRequest(@NotBlank @Size(max = 254) String email) {
+    }
+
+    public record ResetPasswordRequest(
+            @NotBlank @Size(max = 200) String token,
+            @NotBlank @Size(min = MIN_PASSWORD, max = MAX_PASSWORD) String newPassword) {
+    }
+
     public record TokenResponse(
             String accessToken,
             String tokenType,

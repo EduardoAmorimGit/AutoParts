@@ -2,6 +2,7 @@ package com.autoparts_maven.autoparts_maven.identity;
 
 import com.autoparts_maven.autoparts_maven.identity.IdentityExceptions.EmailAlreadyRegisteredException;
 import com.autoparts_maven.autoparts_maven.identity.IdentityExceptions.InvalidCredentialsException;
+import com.autoparts_maven.autoparts_maven.identity.IdentityExceptions.InvalidPasswordResetTokenException;
 import com.autoparts_maven.autoparts_maven.identity.IdentityExceptions.InvalidRefreshTokenException;
 import com.autoparts_maven.autoparts_maven.identity.IdentityExceptions.UserNotFoundException;
 import com.autoparts_maven.autoparts_maven.identity.IdentityExceptions.WrongCurrentPasswordException;
@@ -28,6 +29,11 @@ class IdentityExceptionHandler {
     @ExceptionHandler(InvalidRefreshTokenException.class)
     ProblemDetail handleInvalidRefresh(InvalidRefreshTokenException exception) {
         return problem(HttpStatus.UNAUTHORIZED, "Invalid refresh token", exception);
+    }
+
+    @ExceptionHandler(InvalidPasswordResetTokenException.class)
+    ProblemDetail handleInvalidResetToken(InvalidPasswordResetTokenException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "Invalid password reset link", exception);
     }
 
     @ExceptionHandler(WrongCurrentPasswordException.class)

@@ -30,15 +30,17 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordResetService passwordResetService;
     // Compared against when the e-mail is unknown, so a miss costs the same BCrypt time as a hit.
     private final String dummyPasswordHash;
 
     AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
-            TokenService tokenService, PasswordEncoder passwordEncoder) {
+            TokenService tokenService, PasswordEncoder passwordEncoder, PasswordResetService passwordResetService) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenService = tokenService;
         this.passwordEncoder = passwordEncoder;
+        this.passwordResetService = passwordResetService;
         this.dummyPasswordHash = passwordEncoder.encode("dummy-password-for-timing");
     }
 
@@ -106,7 +108,10 @@ public class AuthService {
         return UserResponse.from(getUser(userId));
     }
 
-    /** Changing the password signs the user out everywhere (all refresh tokens revoked). */
+    /**
+     * Changing the password signs the user out everywhere (all refresh tokens revoked), voids open
+     * reset links and e-mails the customer.
+     */
     @Transactional
     public void changePassword(Long userId, ChangePasswordRequest request) {
         User user = getUser(userId);
@@ -114,7 +119,7 @@ public class AuthService {
             throw new WrongCurrentPasswordException();
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        refreshTokenRepository.revokeAllForUser(userId, Instant.now());
+        passwordResetService.passwordChanged(userId, Instant.now());
     }
 
     @Transactional(readOnly = true)

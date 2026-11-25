@@ -35,4 +35,11 @@ final class IdentityExceptions {
             super("User not found");
         }
     }
+
+    /** Same message for unknown, used and expired links. */
+    static class InvalidPasswordResetTokenException extends RuntimeException {
+        InvalidPasswordResetTokenException() {
+            super("This password reset link is invalid or has expired; request a new one");
+        }
+    }
 }

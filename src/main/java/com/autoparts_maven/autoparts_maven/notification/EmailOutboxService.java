@@ -38,7 +38,14 @@ public class EmailOutboxService {
         this.maxAttempts = maxAttempts;
     }
 
-    public record Email(Long userId, Long orderId, String kind, String to, String subject, String body) {
+    static final String REDACTED_BODY = "[conteúdo removido após o envio: continha um link de uso único]";
+
+    public record Email(Long userId, Long orderId, String kind, String to, String subject, String body,
+            boolean sensitive) {
+
+        public Email(Long userId, Long orderId, String kind, String to, String subject, String body) {
+            this(userId, orderId, kind, to, subject, body, false);
+        }
     }
 
     @Transactional
@@ -50,6 +57,7 @@ public class EmailOutboxService {
         entry.setToAddress(email.to());
         entry.setSubject(truncate(email.subject(), 200));
         entry.setBody(email.body());
+        entry.setSensitive(email.sensitive());
         entry.setNextAttemptAt(Instant.now());
         return repository.save(entry);
     }
@@ -89,6 +97,7 @@ public class EmailOutboxService {
             entry.setStatus(EmailOutbox.Status.SENT);
             entry.setSentAt(Instant.now());
             entry.setLastError(null);
+            redactIfSensitive(entry);
         });
     }
 
@@ -97,6 +106,7 @@ public class EmailOutboxService {
             entry.setLastError(truncate(error, 500));
             if (entry.getAttempts() >= maxAttempts) {
                 entry.setStatus(EmailOutbox.Status.FAILED);
+                redactIfSensitive(entry);
                 log.warn("E-mail {} ({}) failed {} times; giving up", id, entry.getKind(), entry.getAttempts());
             } else {
                 // 1, 4, 9, 16... minutes between attempts.
@@ -104,6 +114,12 @@ public class EmailOutboxService {
                 entry.setNextAttemptAt(Instant.now().plus(Duration.ofMinutes(minutes)));
             }
         });
+    }
+
+    private static void redactIfSensitive(EmailOutbox entry) {
+        if (entry.isSensitive()) {
+            entry.setBody(REDACTED_BODY);
+        }
     }
 
     private static String truncate(String value, int max) {
