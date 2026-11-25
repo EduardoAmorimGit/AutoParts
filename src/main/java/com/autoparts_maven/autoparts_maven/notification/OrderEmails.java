@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /** Plain-text customer e-mails (pt-BR). Every message ends with the seller identification and contacts. */
@@ -24,9 +25,14 @@ class OrderEmails {
     }
 
     private final StoreInfo store;
+    private final String passwordResetUrl;
 
-    OrderEmails(StoreInfo store) {
+    OrderEmails(StoreInfo store, @Value("${auth.password-reset.url:}") String passwordResetUrl,
+            @Value("${store.site-url:}") String siteUrl) {
         this.store = store;
+        this.passwordResetUrl = passwordResetUrl.isBlank()
+                ? siteUrl.replaceAll("/+$", "") + "/redefinir-senha"
+                : passwordResetUrl;
     }
 
     Content placed(String name, OrderResponse order) {
@@ -122,6 +128,26 @@ class OrderEmails {
                 + " e ela não foi aprovada.\nMotivo: " + request.rejectionReason() + "\n\n"
                 + "Se discordar ou tiver novas informações, responda a este e-mail ou fale com o nosso atendimento: "
                 + "vamos reavaliar.\n" + footer());
+    }
+
+    /**
+     * The token goes in the URL fragment (after '#'): browsers never send it to servers nor in the
+     * Referer header, so it does not end up in access logs. The store page reads it from location.hash.
+     */
+    Content passwordReset(String name, String token, Instant expiresAt) {
+        return new Content("Redefinição de senha", greeting(name)
+                + "Recebemos um pedido para redefinir a senha da sua conta. Para criar uma nova senha, acesse:\n\n"
+                + passwordResetUrl + "#token=" + token + "\n\n"
+                + "O link vale até " + DATE_TIME.format(expiresAt) + " e só pode ser usado uma vez.\n"
+                + "Se não foi você, ignore este e-mail: a sua senha continua a mesma.\n" + footer());
+    }
+
+    Content passwordChanged(String name, Instant changedAt) {
+        return new Content("Sua senha foi alterada", greeting(name)
+                + "A senha da sua conta foi alterada em " + DATE_TIME.format(changedAt)
+                + ". Por segurança, encerramos as sessões abertas em todos os aparelhos.\n\n"
+                + "Se não foi você, use a opção \"Esqueci minha senha\" para criar uma nova e fale com o nosso "
+                + "atendimento.\n" + footer());
     }
 
     private String summary(OrderResponse order) {
