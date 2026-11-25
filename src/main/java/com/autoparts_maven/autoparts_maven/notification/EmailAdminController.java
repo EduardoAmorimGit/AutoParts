@@ -25,7 +25,7 @@ class EmailAdminController {
 
         static EmailView from(EmailOutbox e) {
             return new EmailView(e.getId(), e.getOrderId(), e.getKind(), e.getToAddress(), e.getSubject(),
-                    e.getBody(), e.getStatus().name(), e.getAttempts(), e.getLastError(), e.getCreatedAt(),
+                    e.isSensitive() ? EmailOutboxService.REDACTED_BODY : e.getBody(), e.getStatus().name(), e.getAttempts(), e.getLastError(), e.getCreatedAt(),
                     e.getSentAt());
         }
     }
@@ -57,6 +57,10 @@ class EmailAdminController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "E-mail not found"));
         if (entry.getStatus() != EmailOutbox.Status.FAILED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only failed e-mails can be retried");
+        }
+        if (entry.isSensitive()) {
+            // The secret link was redacted; the customer must request a new one.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This e-mail held a one-time link; it cannot be resent");
         }
         entry.setStatus(EmailOutbox.Status.PENDING);
         entry.setAttempts(0);

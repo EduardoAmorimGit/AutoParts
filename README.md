@@ -14,7 +14,7 @@ API REST de uma loja de peças e itens de manutenção automotiva: o cliente inf
 - **Consulta por placa**: integração com a Simples API para identificar o veículo; o resultado é salvo para não consultar o provedor de novo, e as consultas pagas têm limite por IP.
 - **Fichas de veículo e compatibilidade**: a compatibilidade é cadastrada por **ficha** (marca, modelo, motor, combustível, faixa de anos), não por placa. A placa é resolvida para a ficha automaticamente quando os dados batem sem ambiguidade; caso contrário, o veículo entra numa fila para o administrador.
 - **Importação de catálogos**: aplicações de fabricantes/fornecedores entram por planilha CSV, sempre com a **fonte** registrada, e só aparecem para o cliente depois de **validadas** por um administrador. Nenhuma compatibilidade é inferida ou inventada.
-- **Contas e login**: cadastro de clientes, login com **JWT** (token de acesso curto + refresh token rotativo), troca de senha e papel `ADMIN` para o painel.
+- **Contas e login**: cadastro de clientes, login com **JWT** (token de acesso curto + refresh token rotativo), troca de senha, recuperação de senha por e-mail (link de uso único) e papel `ADMIN` para o painel.
 - **Erros padronizados**: todas as respostas de erro seguem o `ProblemDetail` (RFC 9457 – `application/problem+json`).
 - **LGPD**: guarda só o necessário do veículo (sem dono, CPF, endereço ou cor), não expõe placas em endpoints públicos e não registra placa, senha ou chave de API em log.
 
@@ -71,6 +71,8 @@ cp .env.example .env
 | POST | `/api/auth/login` | público | Login (retorna access + refresh token) |
 | POST | `/api/auth/refresh` | público | Renova os tokens (rotação) |
 | POST | `/api/auth/logout` | público | Revoga o refresh token |
+| POST | `/api/auth/password/forgot` | público | Envia link de redefinição de senha (sempre 202) |
+| POST | `/api/auth/password/reset` | público | Define nova senha com o token do link (encerra as sessões) |
 | GET | `/api/me` | autenticado | Dados da própria conta |
 | PUT | `/api/me/password` | autenticado | Troca a senha (encerra as outras sessões) |
 | GET | `/api/products?page=0&size=20&sort=name,asc` | público | Lista produtos |

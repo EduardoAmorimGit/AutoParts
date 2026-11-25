@@ -30,7 +30,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
-                                "/api/auth/refresh", "/api/auth/logout").permitAll()
+                                "/api/auth/refresh", "/api/auth/logout", "/api/auth/password/forgot",
+                                "/api/auth/password/reset").permitAll()
                         // Customer flow: plate lookup and the compatible products of a vehicle.
                         .requestMatchers(HttpMethod.POST, "/api/vehicles/lookup").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vehicles/*/products").permitAll()

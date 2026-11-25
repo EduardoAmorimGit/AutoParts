@@ -64,6 +64,10 @@ public class EmailOutbox {
     @Column(name = "next_attempt_at", nullable = false)
     private Instant nextAttemptAt = Instant.now();
 
+    /** Body carries a secret (e.g. a reset link): redacted once sent or given up, never shown to admins. */
+    @Column(nullable = false)
+    private boolean sensitive;
+
     @Column(name = "sent_at")
     private Instant sentAt;
 
